@@ -1,0 +1,132 @@
+"""
+Main FastAPI application for OCR Backend API.
+"""
+
+import asyncio
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+
+# --- Core Application Imports ---
+from config.settings import get_settings
+from app.logger_config import setup_logger
+from app.middleware.error_handler import register_error_handlers
+
+# --- Router Imports ---
+from app.routers import ocr_router
+
+# --- Initialize Settings and Logger ---
+settings = get_settings()
+logger = setup_logger(__name__)
+
+logger.info(f"Starting {settings.PROJECT_NAME} in {settings.APP_ENV} mode...")
+
+# --- Initialize FastAPI App ---
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version="0.1.0",
+    description="A FastAPI-based backend service for Optical Character Recognition (OCR) processing",
+    debug=settings.DEBUG,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
+
+# --- Configure CORS ---
+logger.info("Configuring CORS middleware...")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# --- Configure Rate Limiter ---
+logger.info("Configuring rate limiter...")
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute"]
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# --- Register Custom Error Handlers and Middleware ---
+register_error_handlers(app)
+
+# --- Create required directories ---
+def create_directories():
+    """Create required directories for file storage."""
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+    Path("logs").mkdir(parents=True, exist_ok=True)
+    logger.info("Required directories created/verified")
+
+# --- Include Routers ---
+logger.info("Including API routers...")
+app.include_router(ocr_router.router, prefix="/v1", tags=["OCR"])
+
+# --- Root Endpoint ---
+@app.get("/", tags=["Root"])
+async def root():
+    """Root endpoint providing a welcome message."""
+    logger.debug("Root endpoint accessed.")
+    return {
+        "message": f"Welcome to the {settings.PROJECT_NAME}!",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "status": "healthy"
+    }
+
+# --- Health Check Endpoint ---
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Provides basic health status of the API."""
+    logger.debug("Health check endpoint accessed.")
+    
+    # Check external OCR service
+    from app.services.external_ocr_service import external_ocr_service
+    external_ocr_status = "available" if await external_ocr_service.health_check() else "unavailable"
+    
+    return {
+        "status": "healthy",
+        "environment": settings.APP_ENV,
+        "service": settings.PROJECT_NAME,
+        "version": "0.1.0",
+        "external_ocr_status": external_ocr_status
+    }
+
+# --- Startup Event Handler ---
+@app.on_event("startup")
+async def startup_event():
+    """Handles application startup tasks."""
+    logger.info("Application startup initiated...")
+    create_directories()
+    logger.info("Application startup complete.")
+
+# --- Shutdown Event Handler ---
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Handles graceful shutdown tasks."""
+    logger.info("Application shutdown initiated...")
+    # Add cleanup logic here if needed
+    await asyncio.sleep(0.1)  # Small delay for tasks to finish
+    logger.info("Application shutdown complete.")
+
+# --- Direct Run Configuration (for development/debugging) ---
+if __name__ == "__main__":
+    import uvicorn
+    logger.info("Running application directly using Uvicorn...")
+    uvicorn.run(
+        "app.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.RELOAD,
+        log_level=settings.LOG_LEVEL.lower()
+    ) 

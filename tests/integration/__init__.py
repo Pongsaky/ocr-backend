@@ -1,0 +1,1 @@
+"""Integration tests package for OCR Backend API.""" 

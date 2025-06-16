@@ -1,0 +1,1 @@
+"""Pydantic models package for OCR Backend API.""" 
