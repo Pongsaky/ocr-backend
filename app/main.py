@@ -90,16 +90,20 @@ async def health_check():
     """Provides basic health status of the API."""
     logger.debug("Health check endpoint accessed.")
     
-    # Check external OCR service
+    # Check external services
     from app.services.external_ocr_service import external_ocr_service
+    from app.services.ocr_llm_service import ocr_llm_service
+    
     external_ocr_status = "available" if await external_ocr_service.health_check() else "unavailable"
+    llm_service_status = "available" if await ocr_llm_service.health_check() else "unavailable"
     
     return {
         "status": "healthy",
         "environment": settings.APP_ENV,
         "service": settings.PROJECT_NAME,
         "version": "0.1.0",
-        "external_ocr_status": external_ocr_status
+        "external_ocr_status": external_ocr_status,
+        "llm_service_status": llm_service_status
     }
 
 # --- Startup Event Handler ---

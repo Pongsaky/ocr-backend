@@ -68,20 +68,6 @@ async function sendMessage() {
     }
     console.log(messageContent);
 
-    // // Prepare the message content with text and image
-    // const messageContent = [
-    //     {
-    //         "type": "text",
-    //         "text": "อ่านข้อความในภาพนี้" // Use userMessage or a default prompt
-    //     },
-    //     {
-    //         "type": "image_url",
-    //         "image_url": {
-    //             "url": `data:image/jpeg;base64,${base64ImageData}`
-    //         }
-    //     }
-    // ];
-
     // Construct the request body
     const requestBody = {
         "messages": [

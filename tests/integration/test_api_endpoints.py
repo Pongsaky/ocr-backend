@@ -195,17 +195,31 @@ class TestOCRAPIEndpoints:
     
     def test_get_service_info(self, client):
         """Test get service info endpoint."""
-        with patch('app.services.external_ocr_service.external_ocr_service.health_check', new_callable=AsyncMock) as mock_health:
-            mock_health.return_value = True
+        with patch('app.services.external_ocr_service.external_ocr_service.health_check', new_callable=AsyncMock) as mock_ocr_health, \
+             patch('app.services.ocr_llm_service.ocr_llm_service.health_check', new_callable=AsyncMock) as mock_llm_health:
+            mock_ocr_health.return_value = True
+            mock_llm_health.return_value = True
             
             response = client.get("/v1/ocr/service-info")
             
             assert response.status_code == 200
             data = response.json()
-            assert "service_name" in data
-            assert "base_url" in data
-            assert "status" in data
-            assert data["status"] == "available"
+            
+            # Check OCR service info
+            assert "ocr_service" in data
+            assert "service_name" in data["ocr_service"]
+            assert "base_url" in data["ocr_service"]
+            assert "status" in data["ocr_service"]
+            assert data["ocr_service"]["status"] == "available"
+            
+            # Check LLM service info
+            assert "llm_service" in data
+            assert "service_name" in data["llm_service"]
+            assert "base_url" in data["llm_service"]
+            assert "status" in data["llm_service"]
+            assert "default_model" in data["llm_service"]
+            assert "default_prompt" in data["llm_service"]
+            assert data["llm_service"]["status"] == "available"
     
     def test_rate_limiting(self, client, sample_image_file):
         """Test rate limiting functionality."""

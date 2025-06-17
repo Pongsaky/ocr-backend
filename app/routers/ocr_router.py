@@ -10,7 +10,8 @@ from slowapi.util import get_remote_address
 
 from app.logger_config import get_logger
 from app.models.ocr_models import (
-    OCRRequest, OCRResponse, OCRResult, ErrorResponse
+    OCRRequest, OCRResponse, OCRResult, ErrorResponse,
+    OCRLLMRequest, OCRLLMResponse, OCRLLMResult
 )
 from app.controllers.ocr_controller import ocr_controller
 from config.settings import get_settings
@@ -145,6 +146,171 @@ async def process_image_sync(
         raise HTTPException(
             status_code=500,
             detail=f"Processing failed: {str(e)}"
+        )
+
+
+# --- LLM-Enhanced OCR Endpoints ---
+
+@router.post(
+    "/ocr/process-with-llm",
+    response_model=OCRLLMResponse,
+    summary="Process image for LLM-enhanced OCR (Async)",
+    description="Upload an image file for asynchronous LLM-enhanced OCR processing. Returns a task ID to check status.",
+    responses={
+        200: {"description": "LLM OCR task created successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_image_with_llm_async(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="Image file to process"),
+    request: Request = None
+):
+    """
+    Process an uploaded image for LLM-enhanced OCR asynchronously.
+    
+    Args:
+        request: JSON string containing OCR LLM parameters
+        file: Uploaded image file
+        
+    Returns:
+        OCRLLMResponse: Task information with unique ID
+    """
+    import json
+    
+    try:
+        # Parse OCR LLM request or use defaults if empty
+        if request_data:
+            ocr_llm_request = OCRLLMRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            ocr_llm_request = OCRLLMRequest()
+        
+        logger.info(
+            f"Received async LLM OCR request for {file.filename} "
+            f"with threshold: {ocr_llm_request.threshold}, contrast: {ocr_llm_request.contrast_level}, "
+            f"prompt: {ocr_llm_request.prompt}, model: {ocr_llm_request.model}"
+        )
+        
+        # Process image with LLM
+        response = await ocr_controller.process_image_with_llm(file, ocr_llm_request)
+        
+        return response
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"LLM OCR processing request failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM processing failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/process-with-llm-sync",
+    response_model=OCRLLMResult,
+    summary="Process image for LLM-enhanced OCR (Sync)",
+    description="Upload an image file for synchronous LLM-enhanced OCR processing. Returns results immediately.",
+    responses={
+        200: {"description": "LLM OCR processing completed"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Processing failed"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_image_with_llm_sync(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="Image file to process"),
+    request: Request = None
+):
+    """
+    Process an uploaded image for LLM-enhanced OCR synchronously.
+    
+    Args:
+        request: JSON string containing OCR LLM parameters
+        file: Uploaded image file
+        
+    Returns:
+        OCRLLMResult: LLM OCR processing result
+    """
+    import json
+    
+    try:
+        # Parse OCR LLM request or use defaults if empty
+        if request_data:
+            ocr_llm_request = OCRLLMRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            ocr_llm_request = OCRLLMRequest()
+        
+        logger.info(
+            f"Received sync LLM OCR request for {file.filename} "
+            f"with threshold: {ocr_llm_request.threshold}, contrast: {ocr_llm_request.contrast_level}, "
+            f"prompt: {ocr_llm_request.prompt}, model: {ocr_llm_request.model}"
+        )
+        
+        # Process image with LLM synchronously
+        result = await ocr_controller.process_image_with_llm_sync(file, ocr_llm_request)
+        
+        return result
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"Sync LLM OCR processing failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM processing failed: {str(e)}"
+        )
+
+
+@router.get(
+    "/ocr/llm-tasks/{task_id}",
+    response_model=OCRLLMResponse,
+    summary="Get LLM OCR task status",
+    description="Get the status and results of an LLM OCR processing task.",
+    responses={
+        200: {"description": "LLM task status retrieved"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def get_llm_task_status(request: Request, task_id: str):
+    """
+    Get the status of an LLM OCR processing task.
+    
+    Args:
+        task_id: Unique task identifier
+        
+    Returns:
+        OCRLLMResponse: Task status and result
+    """
+    logger.debug(f"Checking status for LLM task {task_id}")
+    
+    try:
+        response = await ocr_controller.get_llm_task_status(task_id)
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get LLM task status for {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get LLM task status: {str(e)}"
         )
 
 
@@ -303,23 +469,37 @@ async def get_ocr_parameters():
 )
 async def get_service_info():
     """
-    Get information about the external OCR service.
+    Get information about the external OCR services.
     
     Returns:
         Dict[str, Any]: External service information
     """
     from app.services.external_ocr_service import external_ocr_service
+    from app.services.ocr_llm_service import ocr_llm_service
     
     # Check service availability
-    is_available = await external_ocr_service.health_check()
+    ocr_available = await external_ocr_service.health_check()
+    llm_available = await ocr_llm_service.health_check()
     
     service_info = {
-        "service_name": "Vision World OCR API",
-        "base_url": external_ocr_service.base_url,
-        "endpoint": external_ocr_service.endpoint,
-        "status": "available" if is_available else "unavailable",
-        "timeout_seconds": external_ocr_service.timeout,
-        "description": "External OCR service for text extraction from images"
+        "ocr_service": {
+            "service_name": "Vision World OCR API",
+            "base_url": external_ocr_service.base_url,
+            "endpoint": external_ocr_service.endpoint,
+            "status": "available" if ocr_available else "unavailable",
+            "timeout_seconds": external_ocr_service.timeout,
+            "description": "External OCR service for text extraction from images"
+        },
+        "llm_service": {
+            "service_name": "Pathumma Vision OCR LLM",
+            "base_url": ocr_llm_service.base_url,
+            "endpoint": ocr_llm_service.endpoint,
+            "status": "available" if llm_available else "unavailable",
+            "timeout_seconds": ocr_llm_service.timeout,
+            "default_model": ocr_llm_service.default_model,
+            "default_prompt": ocr_llm_service.default_prompt,
+            "description": "LLM service for enhanced text extraction and correction"
+        }
     }
     
     return service_info 

@@ -5,6 +5,7 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
 ## 🚀 Features
 
 - **External OCR Integration**: Uses Vision World API for text extraction
+- **LLM-Enhanced OCR**: Integration with Pathumma Vision OCR LLM for improved text extraction
 - **Dual Processing Modes**: Synchronous and asynchronous OCR processing
 - **Task Management**: Track processing status with unique task IDs
 - **Image Format Support**: JPEG, PNG, BMP, TIFF, WebP
@@ -76,6 +77,13 @@ EXTERNAL_OCR_BASE_URL=http://203.185.131.205/vision-world
 EXTERNAL_OCR_ENDPOINT=/process-image
 EXTERNAL_OCR_TIMEOUT=30
 
+# OCR LLM API Settings
+OCR_LLM_BASE_URL=http://203.185.131.205/pathumma-vision-ocr
+OCR_LLM_ENDPOINT=/v1/chat/completions
+OCR_LLM_TIMEOUT=60
+OCR_LLM_MODEL=nectec/Pathumma-vision-ocr-lora-dev
+OCR_LLM_DEFAULT_PROMPT=ข้อความในภาพนี้
+
 # OCR Processing Settings
 DEFAULT_THRESHOLD=128
 DEFAULT_CONTRAST_LEVEL=1.0
@@ -127,8 +135,13 @@ The API will be available at:
 - `POST /v1/ocr/process` - Asynchronous OCR processing
 - `POST /v1/ocr/process-sync` - Synchronous OCR processing
 
+### LLM-Enhanced OCR Processing  
+- `POST /v1/ocr/process-with-llm` - Asynchronous LLM-enhanced OCR processing
+- `POST /v1/ocr/process-with-llm-sync` - Synchronous LLM-enhanced OCR processing
+
 ### Task Management
 - `GET /v1/ocr/tasks/{task_id}` - Get task status
+- `GET /v1/ocr/llm-tasks/{task_id}` - Get LLM task status
 - `GET /v1/ocr/tasks` - List all tasks
 - `DELETE /v1/ocr/tasks/cleanup` - Clean up completed tasks
 
@@ -164,6 +177,20 @@ curl -X GET "http://localhost:8000/v1/ocr/tasks/{task_id}"
 
 ```bash
 curl -X GET "http://localhost:8000/v1/ocr/parameters"
+
+### LLM-Enhanced OCR Processing
+
+```bash
+curl -X POST "http://localhost:8000/v1/ocr/process-with-llm-sync" \
+  -F "file=@image.jpg" \
+  -F 'request={"threshold": 500, "contrast_level": 1.3, "prompt": "อ่านข้อความในภาพนี้", "model": "nectec/Pathumma-vision-ocr-lora-dev"}'
+```
+
+### Check LLM Task Status
+
+```bash
+curl -X GET "http://localhost:8000/v1/ocr/llm-tasks/{task_id}"
+```
 ```
 
 ## 🧪 Testing

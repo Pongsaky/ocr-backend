@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     EXTERNAL_OCR_ENDPOINT: str = os.getenv("EXTERNAL_OCR_ENDPOINT", "/process-image")
     EXTERNAL_OCR_TIMEOUT: int = int(os.getenv("EXTERNAL_OCR_TIMEOUT", "30"))
     
+    # --- OCR LLM API Settings ---
+    OCR_LLM_BASE_URL: str = os.getenv("OCR_LLM_BASE_URL", "http://203.185.131.205/pathumma-vision-ocr")
+    OCR_LLM_ENDPOINT: str = os.getenv("OCR_LLM_ENDPOINT", "/v1/chat/completions")
+    OCR_LLM_TIMEOUT: int = int(os.getenv("OCR_LLM_TIMEOUT", "60"))
+    OCR_LLM_MODEL: str = os.getenv("OCR_LLM_MODEL", "nectec/Pathumma-vision-ocr-lora-dev")
+    OCR_LLM_DEFAULT_PROMPT: str = os.getenv("OCR_LLM_DEFAULT_PROMPT", "ข้อความในภาพนี้")
+    
     # --- OCR Processing Settings ---
     DEFAULT_THRESHOLD: int = int(os.getenv("DEFAULT_THRESHOLD", "500"))
     DEFAULT_CONTRAST_LEVEL: float = float(os.getenv("DEFAULT_CONTRAST_LEVEL", "1.3"))
