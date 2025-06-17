@@ -28,6 +28,7 @@ This project uses a comprehensive testing strategy with two main categories:
 - **Dependencies**: Mocked external services
 - **Execution Time**: ~0.2-0.5 seconds
 - **Coverage**: 100% for LLM service, 80%+ overall
+- **Output**: Shows mocked responses for validation
 
 ### 🌐 Integration Tests (Real & End-to-End)
 - **Location**: `tests/integration/`
@@ -35,6 +36,7 @@ This project uses a comprehensive testing strategy with two main categories:
 - **Dependencies**: Live external services
 - **Execution Time**: ~0.5-2 seconds (surprisingly fast!)
 - **Coverage**: Critical user journeys and API interactions
+- **Output**: Shows actual API responses and extracted text
 
 ## Quick Start
 
@@ -205,6 +207,47 @@ This script verifies:
 - Validation functions work properly
 - Logging option works as expected
 
+### Expected Test Output Examples
+
+#### Unit Test Output (Mocked Responses)
+```
+🧪 Unit Test Result (Mocked API):
+   Success: True
+   Mocked response: 'Enhanced extracted text from image'
+   Processing time: 1.52s
+   Note: This is a mocked response, not real API output
+```
+
+#### Integration Test Output (Real API Responses)
+```
+🔍 Real LLM API Response Details:
+   Success: False
+   Processing time: 2.13s
+   LLM processing time: 1.05s
+   Model used: nectec/Pathumma-vision-ocr-lora-dev
+   Original OCR: 'Sample OCR text'
+   ❌ API failed (expected for current API state)
+   Error details: HTTP 400 error
+
+🔍 Serialization Test Results:
+   ✅ Real API accepted our serialization
+   Response preview: 'ข้อผิดพลาด: ไม่สามารถประมวลผลคำขอได้...'
+   Response length: 125 characters
+```
+
+#### Base64 Encoding Output
+```
+=== Image Encoding Utility Test ===
+
+Testing image encoding without logging...
+Image info: {'path': '/path/to/test_image.png', 'size_bytes': 165513, 'size_kb': 161.6, 'extension': '.png', 'exists': True}
+Base64 encoding: SUCCESS (length: 220684 chars)
+Base64 preview: iVBORw0KGgoAAAANSUhEUgAAAo4AAAOeCAYAAACNr5HPAAAMTWl...
+Base64 validation: PASS
+
+✅ SUCCESS: Both encoding methods produce identical results
+```
+
 ### API Speed Analysis
 
 **Why are real API calls so fast?**
@@ -225,10 +268,10 @@ python -m pytest tests/integration/test_llm_integration.py::TestLLMIntegration::
 
 | Test Method | Purpose | What It Validates |
 |-------------|---------|-------------------|
-| `test_process_image_with_llm_success` | End-to-end LLM processing | Complete workflow with mocked API |
+| `test_process_image_with_llm_success` | End-to-end LLM processing | Complete workflow with mocked API *(shows mocked response)* |
 | `test_process_image_with_llm_failure` | Error handling | Graceful failure when LLM API fails |
 | `test_prepare_multimodal_content` | Content formatting | Proper multimodal message structure |
-| `test_call_llm_api_success` | API communication | HTTP request/response handling |
+| `test_call_llm_api_success` | API communication | HTTP request/response handling *(mocked)* |
 | `test_serialization_excludes_none_fields` | **Critical regression test** | Prevents None field serialization bug |
 | `test_multimodal_content_serialization` | JSON formatting | Proper serialization of complex objects |
 | `test_health_check_success` | Service monitoring | Health check endpoint functionality |
@@ -240,13 +283,13 @@ python -m pytest tests/integration/test_llm_integration.py::TestLLMIntegration::
 | Test Method | Purpose | What It Validates |
 |-------------|---------|-------------------|
 | `test_real_llm_api_connectivity` | API availability | Can connect to live LLM API |
-| `test_real_llm_api_with_simple_image` | End-to-end processing | Complete workflow with real API |
-| `test_real_serialization_with_api` | **Critical**: Serialization with real API | Ensures exclude_none=True works in production |
-| `test_real_api_response_format` | Response validation | API responses match our models |
+| `test_real_llm_api_with_simple_image` | End-to-end processing | Complete workflow with real API *(shows actual response)* |
+| `test_real_serialization_with_api` | **Critical**: Serialization with real API | Ensures exclude_none=True works in production *(shows API response)* |
+| `test_real_api_response_format` | Response validation | API responses match our models *(shows response format)* |
 | `test_real_api_timeout_handling` | Network resilience | Timeout behavior with real network |
 | `test_real_concurrent_api_calls` | Load testing | Multiple simultaneous requests |
 | `test_real_api_configuration_validation` | Config verification | Service configuration is correct |
-| `test_end_to_end_with_real_workflow` | Complete user journey | Full OCR + LLM enhancement workflow |
+| `test_end_to_end_with_real_workflow` | Complete user journey | Full OCR + LLM enhancement workflow *(shows full API interaction)* |
 
 ### Integration Tests: `tests/integration/test_api_endpoints.py`
 

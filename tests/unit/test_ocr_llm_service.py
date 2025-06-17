@@ -99,6 +99,13 @@ class TestOCRLLMService:
             assert result.ocr_processing_time == ocr_processing_time
             assert result.llm_processing_time > 0
             
+            # Show unit test results (mocked response)
+            print(f"\n🧪 Unit Test Result (Mocked API):")
+            print(f"   Success: {result.success}")
+            print(f"   Mocked response: '{result.extracted_text}'")
+            print(f"   Processing time: {result.processing_time:.2f}s")
+            print(f"   Note: This is a mocked response, not real API output")
+            
             # Verify API was called
             mock_api.assert_called_once()
 

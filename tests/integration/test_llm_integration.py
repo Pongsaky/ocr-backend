@@ -125,11 +125,20 @@ class TestLLMIntegration:
             assert result.contrast_level_used == sample_ocr_llm_request.contrast_level
             assert result.model_used == sample_ocr_llm_request.model
             
+            # Show detailed API response info
+            print(f"\n🔍 Real LLM API Response Details:")
+            print(f"   Success: {result.success}")
+            print(f"   Processing time: {result.processing_time:.2f}s")
+            print(f"   LLM processing time: {result.llm_processing_time:.2f}s")
+            print(f"   Model used: {result.model_used}")
+            print(f"   Original OCR: '{result.original_ocr_text}'")
+            
             if result.success:
-                print(f"✅ LLM API Success: '{result.extracted_text[:100]}...'")
+                print(f"   ✅ Enhanced text: '{result.extracted_text[:100]}...'")
                 assert len(result.extracted_text) > 0
             else:
-                print(f"❌ LLM API Failed, but test structure is valid")
+                print(f"   ❌ API failed (expected for current API state)")
+                print(f"   Error details: {getattr(result, 'error_message', 'No error message')}")
                 
         except Exception as e:
             pytest.fail(f"Real LLM API call failed: {e}")
@@ -172,7 +181,10 @@ class TestLLMIntegration:
         try:
             result = await llm_service._call_llm_api(chat_request)
             assert isinstance(result, str)
-            print(f"✅ Real API accepted our serialization: '{result[:50]}...'")
+            print(f"\n🔍 Serialization Test Results:")
+            print(f"   ✅ Real API accepted our serialization")
+            print(f"   Response preview: '{result[:50]}...'")
+            print(f"   Response length: {len(result)} characters")
         except Exception as e:
             # API might fail for various reasons (authentication, model issues, etc.)
             # The important thing is that our serialization is working correctly
@@ -215,7 +227,11 @@ class TestLLMIntegration:
             assert isinstance(result, str)
             assert len(result) > 0
             
-            print(f"✅ Real API response format valid: '{result[:100]}...'")
+            print(f"\n🔍 API Response Format Test:")
+            print(f"   ✅ Response format valid")
+            print(f"   Response type: {type(result)}")
+            print(f"   Response length: {len(result)} characters") 
+            print(f"   Response preview: '{result[:50]}...'")
             
         except Exception as e:
             # Check if it's a model/format mismatch

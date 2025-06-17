@@ -30,6 +30,7 @@ def test_image_encoding_without_logging():
     # Encode without logging
     base64_string = encode_test_image(enable_logging=False)
     print(f"Base64 encoding: SUCCESS (length: {len(base64_string)} chars)")
+    print(f"Base64 preview: {base64_string[:50]}...")
     
     # Validate encoding
     is_valid = validate_base64(base64_string)

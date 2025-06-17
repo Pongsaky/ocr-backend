@@ -33,9 +33,9 @@ class ImageUtils:
                 
                 if enable_logging:
                     print(f"Image: {image_path}")
-                    print(f"File size: {len(image_data)} bytes")
+                    print(f"File size: {len(image_data)} bytes ({len(image_data)/1024:.1f} KB)")
                     print(f"Base64 length: {len(base64_string)} characters")
-                    print(f"Base64 preview: {base64_string[:100]}...")
+                    print(f"Base64 preview: {base64_string[:50]}...")
                     
                 return base64_string
                 
