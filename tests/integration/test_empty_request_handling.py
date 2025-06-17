@@ -212,8 +212,14 @@ class TestEmptyRequestHandling:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["threshold"]["default"] == 500
-        assert data["threshold"]["max"] == 1024
-        assert data["contrast_level"]["default"] == 1.3
-        assert "500 for general use" in data["threshold"]["recommended"]
-        assert "1.3 for enhanced contrast" in data["contrast_level"]["recommended"] 
+        # Check image processing defaults
+        assert data["image_processing"]["threshold"]["default"] == 500
+        assert data["image_processing"]["threshold"]["max"] == 1024
+        assert data["image_processing"]["contrast_level"]["default"] == 1.3
+        assert "500 for general use" in data["image_processing"]["threshold"]["recommended"]
+        assert "1.3 for enhanced contrast" in data["image_processing"]["contrast_level"]["recommended"]
+        
+        # Check PDF processing defaults
+        assert data["pdf_processing"]["threshold"]["default"] == 500
+        assert data["pdf_processing"]["dpi"]["default"] == 300
+        assert data["pdf_processing"]["max_pages"] == 10 

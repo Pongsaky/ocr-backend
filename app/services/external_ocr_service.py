@@ -140,9 +140,6 @@ class ExternalOCRService:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.debug(f"Calling external OCR API: {url}")
-
-                logger.info(f"Request URL: {url}")
-                logger.info(f"Request: {request.dict()}")
                 
                 response = await client.post(
                     url,

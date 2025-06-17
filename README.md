@@ -6,21 +6,31 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
 
 - **External OCR Integration**: Uses Vision World API for text extraction
 - **LLM-Enhanced OCR**: Integration with Pathumma Vision OCR LLM for improved text extraction
-- **Dual Processing Modes**: Synchronous and asynchronous OCR processing
-- **Task Management**: Track processing status with unique task IDs
-- **Image Format Support**: JPEG, PNG, BMP, TIFF, WebP
+- **PDF OCR Processing**: Multi-page PDF processing with batch optimization and memory management
+- **Dual Processing Modes**: Synchronous and asynchronous OCR processing for both images and PDFs
+- **Task Management**: Track processing status with unique task IDs for all processing types
+- **Multi-Format Support**: 
+  - **Images**: JPEG, PNG, BMP, TIFF, WebP
+  - **PDFs**: Multi-page documents with configurable DPI conversion
+- **Advanced PDF Features**:
+  - Page-by-page processing with individual results
+  - Memory-efficient batch processing
+  - Resource cleanup and error recovery
+  - Configurable DPI (150-600) for optimal quality/performance balance
 - **Rate Limiting**: Configurable request rate limiting
 - **Error Handling**: Comprehensive error handling and logging
 - **Health Monitoring**: Service health checks and external API monitoring
-- **File Validation**: Size and format validation for uploaded images
+- **File Validation**: Size and format validation for uploaded files
 - **CORS Support**: Cross-origin resource sharing configuration
 - **Comprehensive Testing**: Unit and integration tests with high coverage
 
 ## 📋 Requirements
 
 - Python 3.11+
-- Poetry (for dependency management)
+- Poetry (for dependency management)  
 - Access to Vision World OCR API
+- PyMuPDF (for PDF processing)
+- PIL/Pillow (for image processing)
 
 ## 🛠️ Installation
 
@@ -90,6 +100,13 @@ DEFAULT_CONTRAST_LEVEL=1.0
 IMAGE_MAX_SIZE=10485760
 ALLOWED_IMAGE_EXTENSIONS=["jpg","jpeg","png","bmp","tiff","webp"]
 
+# PDF Processing Settings
+MAX_PDF_SIZE=52428800  # 50MB
+MAX_PDF_PAGES=10
+PDF_DPI=300
+PDF_BATCH_SIZE=3
+ALLOWED_PDF_EXTENSIONS=["pdf"]
+
 # File Storage Settings
 UPLOAD_DIR=./uploads
 RESULTS_DIR=./results
@@ -126,6 +143,12 @@ The API will be available at:
 - **Documentation**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
 
+## 📖 Documentation
+
+- **[PDF OCR Processing Guide](docs/PDF_OCR_GUIDE.md)** - Comprehensive guide for PDF OCR features
+- **[External OCR Integration](docs/EXTERNAL_OCR_INTEGRATION.md)** - External service integration details
+- **[Testing Guide](docs/TESTING.md)** - Complete testing documentation
+
 ## 📚 API Endpoints
 
 ### Health Check
@@ -139,9 +162,19 @@ The API will be available at:
 - `POST /v1/ocr/process-with-llm` - Asynchronous LLM-enhanced OCR processing
 - `POST /v1/ocr/process-with-llm-sync` - Synchronous LLM-enhanced OCR processing
 
+### PDF OCR Processing
+- `POST /v1/ocr/process-pdf` - Asynchronous PDF OCR processing
+- `POST /v1/ocr/process-pdf-sync` - Synchronous PDF OCR processing
+
+### PDF LLM-Enhanced OCR Processing
+- `POST /v1/ocr/process-pdf-with-llm` - Asynchronous PDF LLM-enhanced OCR processing
+- `POST /v1/ocr/process-pdf-with-llm-sync` - Synchronous PDF LLM-enhanced OCR processing
+
 ### Task Management
 - `GET /v1/ocr/tasks/{task_id}` - Get task status
 - `GET /v1/ocr/llm-tasks/{task_id}` - Get LLM task status
+- `GET /v1/ocr/pdf-tasks/{task_id}` - Get PDF task status
+- `GET /v1/ocr/pdf-llm-tasks/{task_id}` - Get PDF LLM task status
 - `GET /v1/ocr/tasks` - List all tasks
 - `DELETE /v1/ocr/tasks/cleanup` - Clean up completed tasks
 
@@ -191,7 +224,136 @@ curl -X POST "http://localhost:8000/v1/ocr/process-with-llm-sync" \
 ```bash
 curl -X GET "http://localhost:8000/v1/ocr/llm-tasks/{task_id}"
 ```
+
+## 📄 PDF OCR Usage Examples
+
+### Synchronous PDF OCR Processing
+
+```bash
+# Basic PDF processing with default parameters
+curl -X POST "http://localhost:8000/v1/ocr/process-pdf-sync" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf"
+
+# PDF processing with custom parameters
+curl -X POST "http://localhost:8000/v1/ocr/process-pdf-sync" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf" \
+  -F 'request={"threshold": 500, "contrast_level": 1.3, "dpi": 300}'
 ```
+
+### Asynchronous PDF OCR Processing
+
+```bash
+# Submit PDF task
+curl -X POST "http://localhost:8000/v1/ocr/process-pdf" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf" \
+  -F 'request={"threshold": 500, "contrast_level": 1.3, "dpi": 300}'
+
+# Check PDF task status
+curl -X GET "http://localhost:8000/v1/ocr/pdf-tasks/{task_id}"
+```
+
+### PDF LLM-Enhanced OCR Processing
+
+```bash
+# Synchronous PDF + LLM processing
+curl -X POST "http://localhost:8000/v1/ocr/process-pdf-with-llm-sync" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf" \
+  -F 'request={"threshold": 500, "contrast_level": 1.3, "dpi": 300, "prompt": "อ่านข้อความในเอกสารนี้อย่างถูกต้อง", "model": "nectec/Pathumma-vision-ocr-lora-dev"}'
+
+# Asynchronous PDF + LLM processing
+curl -X POST "http://localhost:8000/v1/ocr/process-pdf-with-llm" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf" \
+  -F 'request={"threshold": 500, "contrast_level": 1.3, "dpi": 300, "prompt": "อ่านข้อความในเอกสารนี้อย่างถูกต้อง"}'
+
+# Check PDF LLM task status
+curl -X GET "http://localhost:8000/v1/ocr/pdf-llm-tasks/{task_id}"
+```
+
+### PDF Response Format
+
+```json
+{
+  "success": true,
+  "total_pages": 3,
+  "processed_pages": 3,
+  "results": [
+    {
+      "page_number": 1,
+      "extracted_text": "Text content from page 1...",
+      "processing_time": 2.34,
+      "success": true,
+      "error_message": null,
+      "threshold_used": 500,
+      "contrast_level_used": 1.3
+    },
+    {
+      "page_number": 2,
+      "extracted_text": "Text content from page 2...",
+      "processing_time": 1.87,
+      "success": true,
+      "error_message": null,
+      "threshold_used": 500,
+      "contrast_level_used": 1.3
+    }
+  ],
+  "total_processing_time": 12.45,
+  "pdf_processing_time": 3.21,
+  "ocr_processing_time": 9.24,
+  "dpi_used": 300
+}
+```
+
+## 📄 PDF Processing Features & Limitations
+
+### ✅ PDF Features
+- **Multi-page processing**: Process up to 10 pages per PDF
+- **Batch optimization**: Memory-efficient processing in configurable batches
+- **Individual page results**: Get detailed results for each page
+- **Resource cleanup**: Automatic cleanup of temporary files and memory
+- **Error recovery**: Individual page failures don't stop entire document processing
+- **Performance metrics**: Detailed timing information for optimization
+
+### ⚙️ PDF Configuration
+- **DPI Range**: 150-600 DPI for PDF-to-image conversion
+  - `150 DPI`: Fast processing, lower quality
+  - `300 DPI`: Balanced quality and speed (recommended)
+  - `600 DPI`: High quality, slower processing
+- **Batch Size**: Process pages in batches (default: 3 pages)
+- **File Size Limit**: 50MB maximum PDF file size
+- **Page Limit**: 10 pages maximum per PDF
+
+### 🚫 PDF Limitations
+- **File Size**: Maximum 50MB per PDF file
+- **Page Count**: Maximum 10 pages per PDF document
+- **Format Support**: Only PDF files (no other document formats)
+- **Memory Usage**: Large PDFs with high DPI settings require more memory
+- **Processing Time**: Scales with page count and DPI settings
+
+### 💡 PDF Best Practices
+1. **DPI Selection**:
+   - Use 300 DPI for most documents
+   - Use 150 DPI for fast processing of low-quality scans
+   - Use 600 DPI only for high-quality documents requiring precise text extraction
+
+2. **Batch Processing**:
+   - Default batch size (3 pages) works well for most scenarios
+   - Reduce batch size for memory-constrained environments
+   - Increase batch size for powerful servers with ample memory
+
+3. **Error Handling**:
+   - Check `success` field for overall processing status
+   - Review individual page `success` status for partial failures
+   - Use `error_message` fields for debugging failed pages
+
+4. **Performance Optimization**:
+   - Use async endpoints for large PDFs to avoid timeout issues
+   - Monitor `processing_time` metrics to optimize parameters
+   - Clean up completed tasks regularly using cleanup endpoint
 
 ## 🧪 Testing
 
@@ -301,7 +463,7 @@ Total Tests: 87
 - **Real API Integration**: Actual HTTP requests to Vision World and Pathumma Vision OCR
 - **Error Handling**: Timeouts, network issues, malformed responses
 - **Concurrent Processing**: Multiple simultaneous API calls
-- **Image Processing**: Real image files from `image/test_image.png`
+- **Image Processing**: Real image files from `test_files/test_image.png`
 
 #### Why Integration Tests Use Real APIs
 Our integration tests make **actual HTTP requests** to:

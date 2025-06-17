@@ -1,7 +1,7 @@
 ---
 description: 
-globs: *.py,*.md
-alwaysApply: false
+globs: 
+alwaysApply: true
 ---
 # rule.mdc
 

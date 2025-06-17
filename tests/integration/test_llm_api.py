@@ -21,12 +21,12 @@ def test_process_image_with_llm_sync_real_api():
     llm_service = OCRLLMService()
     
     # Check if required settings are configured for a real call
-    if not all([llm_service.settings.llm_api_base_url, llm_service.settings.llm_api_key, llm_service.settings.llm_default_model]):
+    if not all([llm_service.settings.OCR_LLM_BASE_URL, llm_service.settings.OCR_LLM_API_KEY, llm_service.settings.OCR_LLM_MODEL]):
         pytest.skip("LLM API settings are not configured. Skipping real API test.")
 
-    image_path = Path("image/test_image.png")
+    image_path = Path("test_files/test_image.png")
     if not image_path.exists():
-        pytest.fail("Test image 'image/test_image.png' not found.")
+        pytest.fail("Test image 'test_files/test_image.png' not found.")
         
     with open(image_path, "rb") as f:
         image_bytes = f.read()

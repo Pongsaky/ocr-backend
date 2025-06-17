@@ -15,10 +15,13 @@ from fastapi import HTTPException, UploadFile
 from app.logger_config import get_logger
 from app.models.ocr_models import (
     OCRRequest, OCRResponse, OCRResult,
-    OCRLLMRequest, OCRLLMResponse, OCRLLMResult
+    OCRLLMRequest, OCRLLMResponse, OCRLLMResult,
+    PDFOCRRequest, PDFOCRResponse, PDFOCRResult,
+    PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult
 )
 from app.services.external_ocr_service import external_ocr_service
 from app.services.ocr_llm_service import ocr_llm_service
+from app.services.pdf_ocr_service import pdf_ocr_service
 from config.settings import get_settings
 
 logger = get_logger(__name__)
@@ -32,6 +35,9 @@ class OCRController:
         """Initialize OCR controller."""
         self.settings = settings
         self.tasks: Dict[str, OCRResponse] = {}
+        self.llm_tasks: Dict[str, OCRLLMResponse] = {}
+        self.pdf_tasks: Dict[str, PDFOCRResponse] = {}
+        self.pdf_llm_tasks: Dict[str, PDFLLMOCRResponse] = {}
         self.executor = ThreadPoolExecutor(
             max_workers=settings.MAX_CONCURRENT_TASKS
         )
@@ -572,6 +578,417 @@ class OCRController:
                 logger.debug(f"Cleaned up temporary file: {file_path}")
         except Exception as e:
             logger.warning(f"Failed to cleanup file {file_path}: {str(e)}")
+    
+    # --- PDF Processing Methods ---
+    
+    async def process_pdf(
+        self, 
+        file: UploadFile, 
+        pdf_request: PDFOCRRequest
+    ) -> PDFOCRResponse:
+        """
+        Process uploaded PDF for OCR.
+        
+        Args:
+            file: Uploaded PDF file
+            pdf_request: PDF OCR processing parameters
+            
+        Returns:
+            PDFOCRResponse: Processing response with task ID
+            
+        Raises:
+            HTTPException: If file validation fails
+        """
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        created_at = datetime.utcnow()
+        
+        logger.info(f"Starting PDF OCR task {task_id} for file {file.filename}")
+        
+        try:
+            # Validate PDF file
+            await self._validate_pdf_file(file)
+            
+            # Save uploaded PDF
+            pdf_path = await self._save_uploaded_file(file, task_id)
+            
+            # Create initial task response
+            task_response = PDFOCRResponse(
+                task_id=task_id,
+                status="processing",
+                result=None,
+                error_message=None,
+                created_at=created_at,
+                completed_at=None
+            )
+            
+            # Store task
+            self.pdf_tasks[task_id] = task_response
+            
+            # Start processing asynchronously
+            asyncio.create_task(
+                self._process_pdf_async(task_id, pdf_path, pdf_request)
+            )
+            
+            return task_response
+            
+        except Exception as e:
+            logger.error(f"Failed to start PDF OCR task {task_id}: {str(e)}")
+            
+            error_response = PDFOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=created_at,
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_tasks[task_id] = error_response
+            return error_response
+    
+    async def process_pdf_sync(
+        self, 
+        file: UploadFile, 
+        pdf_request: PDFOCRRequest
+    ) -> PDFOCRResult:
+        """
+        Process uploaded PDF synchronously.
+        
+        Args:
+            file: Uploaded PDF file
+            pdf_request: PDF OCR processing parameters
+            
+        Returns:
+            PDFOCRResult: Direct PDF OCR processing result
+            
+        Raises:
+            HTTPException: If processing fails
+        """
+        task_id = str(uuid.uuid4())
+        
+        logger.info(f"Starting synchronous PDF OCR for file {file.filename}")
+        
+        try:
+            # Validate PDF file
+            await self._validate_pdf_file(file)
+            
+            # Save uploaded PDF
+            pdf_path = await self._save_uploaded_file(file, task_id)
+            
+            # Process PDF
+            result = await pdf_ocr_service.process_pdf(pdf_path, pdf_request)
+            
+            # Cleanup temporary file
+            await self._cleanup_file(pdf_path)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Synchronous PDF OCR processing failed: {str(e)}")
+            
+            # Try to cleanup file if it exists
+            try:
+                if 'pdf_path' in locals():
+                    await self._cleanup_file(pdf_path)
+            except:
+                pass
+            
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF OCR processing failed: {str(e)}"
+            )
+    
+    async def process_pdf_with_llm(
+        self, 
+        file: UploadFile, 
+        pdf_llm_request: PDFLLMOCRRequest
+    ) -> PDFLLMOCRResponse:
+        """
+        Process uploaded PDF with LLM-enhanced OCR.
+        
+        Args:
+            file: Uploaded PDF file
+            pdf_llm_request: PDF LLM OCR processing parameters
+            
+        Returns:
+            PDFLLMOCRResponse: Processing response with task ID
+            
+        Raises:
+            HTTPException: If file validation fails
+        """
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        created_at = datetime.utcnow()
+        
+        logger.info(f"Starting PDF LLM OCR task {task_id} for file {file.filename}")
+        
+        try:
+            # Validate PDF file
+            await self._validate_pdf_file(file)
+            
+            # Save uploaded PDF
+            pdf_path = await self._save_uploaded_file(file, task_id)
+            
+            # Create initial task response
+            task_response = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="processing",
+                result=None,
+                error_message=None,
+                created_at=created_at,
+                completed_at=None
+            )
+            
+            # Store task
+            self.pdf_llm_tasks[task_id] = task_response
+            
+            # Start processing asynchronously
+            asyncio.create_task(
+                self._process_pdf_with_llm_async(task_id, pdf_path, pdf_llm_request)
+            )
+            
+            return task_response
+            
+        except Exception as e:
+            logger.error(f"Failed to start PDF LLM OCR task {task_id}: {str(e)}")
+            
+            error_response = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=created_at,
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_llm_tasks[task_id] = error_response
+            return error_response
+    
+    async def process_pdf_with_llm_sync(
+        self, 
+        file: UploadFile, 
+        pdf_llm_request: PDFLLMOCRRequest
+    ) -> PDFLLMOCRResult:
+        """
+        Process uploaded PDF with LLM-enhanced OCR synchronously.
+        
+        Args:
+            file: Uploaded PDF file
+            pdf_llm_request: PDF LLM OCR processing parameters
+            
+        Returns:
+            PDFLLMOCRResult: Direct PDF LLM OCR processing result
+            
+        Raises:
+            HTTPException: If processing fails
+        """
+        task_id = str(uuid.uuid4())
+        
+        logger.info(f"Starting synchronous PDF LLM OCR for file {file.filename}")
+        
+        try:
+            # Validate PDF file
+            await self._validate_pdf_file(file)
+            
+            # Save uploaded PDF
+            pdf_path = await self._save_uploaded_file(file, task_id)
+            
+            # Process PDF with LLM
+            result = await pdf_ocr_service.process_pdf_with_llm(pdf_path, pdf_llm_request)
+            
+            # Cleanup temporary file
+            await self._cleanup_file(pdf_path)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Synchronous PDF LLM OCR processing failed: {str(e)}")
+            
+            # Try to cleanup file if it exists
+            try:
+                if 'pdf_path' in locals():
+                    await self._cleanup_file(pdf_path)
+            except:
+                pass
+            
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF LLM OCR processing failed: {str(e)}"
+            )
+    
+    async def get_pdf_task_status(self, task_id: str) -> PDFOCRResponse:
+        """
+        Get the status of a PDF OCR task.
+        
+        Args:
+            task_id: Unique task identifier
+            
+        Returns:
+            PDFOCRResponse: Task status and result
+            
+        Raises:
+            HTTPException: If task not found
+        """
+        if task_id not in self.pdf_tasks:
+            logger.warning(f"PDF task {task_id} not found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"PDF task {task_id} not found"
+            )
+        
+        return self.pdf_tasks[task_id]
+    
+    async def get_pdf_llm_task_status(self, task_id: str) -> PDFLLMOCRResponse:
+        """
+        Get the status of a PDF LLM OCR task.
+        
+        Args:
+            task_id: Unique task identifier
+            
+        Returns:
+            PDFLLMOCRResponse: Task status and result
+            
+        Raises:
+            HTTPException: If task not found
+        """
+        if task_id not in self.pdf_llm_tasks:
+            logger.warning(f"PDF LLM task {task_id} not found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"PDF LLM task {task_id} not found"
+            )
+        
+        return self.pdf_llm_tasks[task_id]
+    
+    async def _process_pdf_async(
+        self, 
+        task_id: str, 
+        pdf_path: Path, 
+        pdf_request: PDFOCRRequest
+    ) -> None:
+        """
+        Process PDF asynchronously and update task status.
+        
+        Args:
+            task_id: Unique task identifier
+            pdf_path: Path to uploaded PDF
+            pdf_request: PDF OCR processing parameters
+        """
+        try:
+            logger.info(f"Processing PDF OCR task {task_id} asynchronously")
+            
+            # Process PDF
+            result = await pdf_ocr_service.process_pdf(pdf_path, pdf_request)
+            
+            # Update task with result
+            completed_at = datetime.utcnow()
+            
+            self.pdf_tasks[task_id] = PDFOCRResponse(
+                task_id=task_id,
+                status="completed" if result.success else "failed",
+                result=result,
+                error_message=None if result.success else "PDF OCR processing failed",
+                created_at=self.pdf_tasks[task_id].created_at,
+                completed_at=completed_at
+            )
+            
+            logger.info(f"PDF OCR task {task_id} completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Async PDF OCR processing failed for task {task_id}: {str(e)}")
+            
+            # Update task with error
+            self.pdf_tasks[task_id] = PDFOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=self.pdf_tasks[task_id].created_at,
+                completed_at=datetime.utcnow()
+            )
+        
+        finally:
+            # Cleanup temporary file
+            await self._cleanup_file(pdf_path)
+    
+    async def _process_pdf_with_llm_async(
+        self, 
+        task_id: str, 
+        pdf_path: Path, 
+        pdf_llm_request: PDFLLMOCRRequest
+    ) -> None:
+        """
+        Process PDF with LLM asynchronously and update task status.
+        
+        Args:
+            task_id: Unique task identifier
+            pdf_path: Path to uploaded PDF
+            pdf_llm_request: PDF LLM OCR processing parameters
+        """
+        try:
+            logger.info(f"Processing PDF LLM OCR task {task_id} asynchronously")
+            
+            # Process PDF with LLM
+            result = await pdf_ocr_service.process_pdf_with_llm(pdf_path, pdf_llm_request)
+            
+            # Update task with result
+            completed_at = datetime.utcnow()
+            
+            self.pdf_llm_tasks[task_id] = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="completed" if result.success else "failed",
+                result=result,
+                error_message=None if result.success else "PDF LLM OCR processing failed",
+                created_at=self.pdf_llm_tasks[task_id].created_at,
+                completed_at=completed_at
+            )
+            
+            logger.info(f"PDF LLM OCR task {task_id} completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Async PDF LLM OCR processing failed for task {task_id}: {str(e)}")
+            
+            # Update task with error
+            self.pdf_llm_tasks[task_id] = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=self.pdf_llm_tasks[task_id].created_at,
+                completed_at=datetime.utcnow()
+            )
+        
+        finally:
+            # Cleanup temporary file
+            await self._cleanup_file(pdf_path)
+    
+    async def _validate_pdf_file(self, file: UploadFile) -> None:
+        """
+        Validate uploaded PDF file.
+        
+        Args:
+            file: Uploaded PDF file
+            
+        Raises:
+            HTTPException: If validation fails
+        """
+        # Check file size
+        if file.size and file.size > self.settings.MAX_PDF_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"PDF file too large. Maximum size: {self.settings.MAX_PDF_SIZE} bytes"
+            )
+        
+        # Check file extension
+        if file.filename:
+            extension = Path(file.filename).suffix.lower().lstrip('.')
+            if extension not in self.settings.ALLOWED_PDF_EXTENSIONS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported PDF format: {extension}. "
+                           f"Supported formats: {', '.join(self.settings.ALLOWED_PDF_EXTENSIONS)}"
+                )
     
     async def list_tasks(self) -> Dict[str, str]:
         """

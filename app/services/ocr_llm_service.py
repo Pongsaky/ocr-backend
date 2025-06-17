@@ -163,9 +163,6 @@ class OCRLLMService:
             # Serialize request excluding None fields
             request_dict = request.model_dump(exclude_none=True)
             
-            import json
-            logger.debug(json.dumps(request_dict, ensure_ascii=False))
-            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     url,

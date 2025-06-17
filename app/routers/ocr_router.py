@@ -11,7 +11,9 @@ from slowapi.util import get_remote_address
 from app.logger_config import get_logger
 from app.models.ocr_models import (
     OCRRequest, OCRResponse, OCRResult, ErrorResponse,
-    OCRLLMRequest, OCRLLMResponse, OCRLLMResult
+    OCRLLMRequest, OCRLLMResponse, OCRLLMResult,
+    PDFOCRRequest, PDFOCRResponse, PDFOCRResult,
+    PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult
 )
 from app.controllers.ocr_controller import ocr_controller
 from config.settings import get_settings
@@ -415,6 +417,330 @@ async def cleanup_tasks(request: Request):
         )
 
 
+# --- PDF OCR Endpoints ---
+
+@router.post(
+    "/ocr/process-pdf",
+    response_model=PDFOCRResponse,
+    summary="Process PDF for OCR (Async)",
+    description="Upload a PDF file for asynchronous OCR processing. Maximum 10 pages. Returns a task ID to check status.",
+    responses={
+        200: {"description": "PDF OCR task created successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large or too many pages"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_pdf_async(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="PDF file to process (max 10 pages)"),
+    request: Request = None
+):
+    """
+    Process an uploaded PDF file for OCR asynchronously.
+    
+    Args:
+        request: JSON string containing PDF OCR parameters
+        file: Uploaded PDF file
+        
+    Returns:
+        PDFOCRResponse: Task information with unique ID
+    """
+    import json
+    
+    try:
+        # Parse PDF OCR request or use defaults if empty
+        if request_data:
+            pdf_request = PDFOCRRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            pdf_request = PDFOCRRequest()
+        
+        logger.info(
+            f"Received async PDF OCR request for {file.filename} "
+            f"with threshold: {pdf_request.threshold}, contrast: {pdf_request.contrast_level}, dpi: {pdf_request.dpi}"
+        )
+        
+        # Process PDF
+        response = await ocr_controller.process_pdf(file, pdf_request)
+        
+        return response
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"PDF OCR processing request failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF processing failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/process-pdf-sync",
+    response_model=PDFOCRResult,
+    summary="Process PDF for OCR (Sync)",
+    description="Upload a PDF file for synchronous OCR processing. Maximum 10 pages. Returns results immediately.",
+    responses={
+        200: {"description": "PDF OCR processing completed"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large or too many pages"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Processing failed"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_pdf_sync(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="PDF file to process (max 10 pages)"),
+    request: Request = None
+):
+    """
+    Process an uploaded PDF file for OCR synchronously.
+    
+    Args:
+        request: JSON string containing PDF OCR parameters
+        file: Uploaded PDF file
+        
+    Returns:
+        PDFOCRResult: PDF OCR processing result
+    """
+    import json
+    
+    try:
+        # Parse PDF OCR request or use defaults if empty
+        if request_data:
+            pdf_request = PDFOCRRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            pdf_request = PDFOCRRequest()
+        
+        logger.info(
+            f"Received sync PDF OCR request for {file.filename} "
+            f"with threshold: {pdf_request.threshold}, contrast: {pdf_request.contrast_level}, dpi: {pdf_request.dpi}"
+        )
+        
+        # Process PDF synchronously
+        result = await ocr_controller.process_pdf_sync(file, pdf_request)
+        
+        return result
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"Sync PDF OCR processing failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF processing failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/process-pdf-with-llm",
+    response_model=PDFLLMOCRResponse,
+    summary="Process PDF for LLM-enhanced OCR (Async)",
+    description="Upload a PDF file for asynchronous LLM-enhanced OCR processing. Maximum 10 pages. Returns a task ID to check status.",
+    responses={
+        200: {"description": "PDF LLM OCR task created successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large or too many pages"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_pdf_with_llm_async(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="PDF file to process (max 10 pages)"),
+    request: Request = None
+):
+    """
+    Process an uploaded PDF file for LLM-enhanced OCR asynchronously.
+    
+    Args:
+        request: JSON string containing PDF LLM OCR parameters
+        file: Uploaded PDF file
+        
+    Returns:
+        PDFLLMOCRResponse: Task information with unique ID
+    """
+    import json
+    
+    try:
+        # Parse PDF LLM OCR request or use defaults if empty
+        if request_data:
+            pdf_llm_request = PDFLLMOCRRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            pdf_llm_request = PDFLLMOCRRequest()
+        
+        logger.info(
+            f"Received async PDF LLM OCR request for {file.filename} "
+            f"with threshold: {pdf_llm_request.threshold}, contrast: {pdf_llm_request.contrast_level}, "
+            f"dpi: {pdf_llm_request.dpi}, prompt: {pdf_llm_request.prompt}, model: {pdf_llm_request.model}"
+        )
+        
+        # Process PDF with LLM
+        response = await ocr_controller.process_pdf_with_llm(file, pdf_llm_request)
+        
+        return response
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"PDF LLM OCR processing request failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF LLM processing failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/process-pdf-with-llm-sync",
+    response_model=PDFLLMOCRResult,
+    summary="Process PDF for LLM-enhanced OCR (Sync)",
+    description="Upload a PDF file for synchronous LLM-enhanced OCR processing. Maximum 10 pages. Returns results immediately.",
+    responses={
+        200: {"description": "PDF LLM OCR processing completed"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large or too many pages"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Processing failed"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_pdf_with_llm_sync(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="PDF file to process (max 10 pages)"),
+    request: Request = None
+):
+    """
+    Process an uploaded PDF file for LLM-enhanced OCR synchronously.
+    
+    Args:
+        request: JSON string containing PDF LLM OCR parameters
+        file: Uploaded PDF file
+        
+    Returns:
+        PDFLLMOCRResult: PDF LLM OCR processing result
+    """
+    import json
+    
+    try:
+        # Parse PDF LLM OCR request or use defaults if empty
+        if request_data:
+            pdf_llm_request = PDFLLMOCRRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            pdf_llm_request = PDFLLMOCRRequest()
+        
+        logger.info(
+            f"Received sync PDF LLM OCR request for {file.filename} "
+            f"with threshold: {pdf_llm_request.threshold}, contrast: {pdf_llm_request.contrast_level}, "
+            f"dpi: {pdf_llm_request.dpi}, prompt: {pdf_llm_request.prompt}, model: {pdf_llm_request.model}"
+        )
+        
+        # Process PDF with LLM synchronously
+        result = await ocr_controller.process_pdf_with_llm_sync(file, pdf_llm_request)
+        
+        return result
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"Sync PDF LLM OCR processing failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF LLM processing failed: {str(e)}"
+        )
+
+
+@router.get(
+    "/ocr/pdf-tasks/{task_id}",
+    response_model=PDFOCRResponse,
+    summary="Get PDF OCR task status",
+    description="Get the status and results of a PDF OCR processing task.",
+    responses={
+        200: {"description": "PDF task status retrieved"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def get_pdf_task_status(request: Request, task_id: str):
+    """
+    Get the status of a PDF OCR task.
+    
+    Args:
+        task_id: Unique task identifier
+        
+    Returns:
+        PDFOCRResponse: Task status and result
+    """
+    try:
+        result = await ocr_controller.get_pdf_task_status(task_id)
+        logger.debug(f"Retrieved PDF task status for {task_id}: {result.status}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get PDF task status for {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve PDF task status: {str(e)}"
+        )
+
+
+@router.get(
+    "/ocr/pdf-llm-tasks/{task_id}",
+    response_model=PDFLLMOCRResponse,
+    summary="Get PDF LLM OCR task status",
+    description="Get the status and results of a PDF LLM OCR processing task.",
+    responses={
+        200: {"description": "PDF LLM task status retrieved"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def get_pdf_llm_task_status(request: Request, task_id: str):
+    """
+    Get the status of a PDF LLM OCR task.
+    
+    Args:
+        task_id: Unique task identifier
+        
+    Returns:
+        PDFLLMOCRResponse: Task status and result
+    """
+    try:
+        result = await ocr_controller.get_pdf_llm_task_status(task_id)
+        logger.debug(f"Retrieved PDF LLM task status for {task_id}: {result.status}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get PDF LLM task status for {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve PDF LLM task status: {str(e)}"
+        )
+
+
 @router.get(
     "/ocr/parameters",
     response_model=Dict[str, Any],
@@ -435,24 +761,77 @@ async def get_ocr_parameters():
     settings = get_settings()
     
     parameters = {
-        "threshold": {
-            "type": "integer",
-            "description": "Threshold value for image binarization",
-            "min": 0,
-            "max": 1024,
-            "default": settings.DEFAULT_THRESHOLD,
-            "recommended": "500 for general use, lower values for darker images, higher for lighter images"
+        "image_processing": {
+            "threshold": {
+                "type": "integer",
+                "description": "Threshold value for image binarization",
+                "min": 0,
+                "max": 1024,
+                "default": settings.DEFAULT_THRESHOLD,
+                "recommended": "500 for general use, lower values for darker images, higher for lighter images"
+            },
+            "contrast_level": {
+                "type": "number",
+                "description": "Contrast enhancement level",
+                "min": 0.1,
+                "max": 5.0,
+                "default": settings.DEFAULT_CONTRAST_LEVEL,
+                "recommended": "1.3 for enhanced contrast, >1.0 to increase contrast, <1.0 to decrease"
+            }
         },
-        "contrast_level": {
-            "type": "number",
-            "description": "Contrast enhancement level",
-            "min": 0.1,
-            "max": 5.0,
-            "default": settings.DEFAULT_CONTRAST_LEVEL,
-            "recommended": "1.3 for enhanced contrast, >1.0 to increase contrast, <1.0 to decrease"
+        "pdf_processing": {
+            "threshold": {
+                "type": "integer",
+                "description": "Threshold value for PDF page image binarization",
+                "min": 0,
+                "max": 1024,
+                "default": settings.DEFAULT_THRESHOLD,
+                "recommended": "500 for general use, lower values for darker images, higher for lighter images"
+            },
+            "contrast_level": {
+                "type": "number",
+                "description": "Contrast enhancement level for PDF pages",
+                "min": 0.1,
+                "max": 5.0,
+                "default": settings.DEFAULT_CONTRAST_LEVEL,
+                "recommended": "1.3 for enhanced contrast, >1.0 to increase contrast, <1.0 to decrease"
+            },
+            "dpi": {
+                "type": "integer",
+                "description": "DPI for PDF to image conversion",
+                "min": 150,
+                "max": 600,
+                "default": settings.PDF_DPI,
+                "recommended": "300 for balanced quality and speed, 600 for high quality, 150 for faster processing"
+            },
+            "max_pages": settings.MAX_PDF_PAGES,
+            "batch_size": settings.PDF_BATCH_SIZE
         },
-        "supported_formats": settings.ALLOWED_IMAGE_EXTENSIONS,
-        "max_file_size_bytes": settings.MAX_FILE_SIZE
+        "llm_parameters": {
+            "prompt": {
+                "type": "string",
+                "description": "Custom prompt for OCR LLM",
+                "default": settings.OCR_LLM_DEFAULT_PROMPT,
+                "recommended": "Use custom prompts for specific use cases or languages"
+            },
+            "model": {
+                "type": "string",
+                "description": "LLM model to use for OCR enhancement",
+                "default": settings.OCR_LLM_MODEL,
+                "recommended": "Use default model unless specific requirements exist"
+            }
+        },
+        "file_constraints": {
+            "images": {
+                "supported_formats": settings.ALLOWED_IMAGE_EXTENSIONS,
+                "max_file_size_bytes": settings.IMAGE_MAX_SIZE
+            },
+            "pdfs": {
+                "supported_formats": settings.ALLOWED_PDF_EXTENSIONS,
+                "max_file_size_bytes": settings.MAX_PDF_SIZE,
+                "max_pages": settings.MAX_PDF_PAGES
+            }
+        }
     }
     
     return parameters

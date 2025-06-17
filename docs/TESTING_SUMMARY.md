@@ -41,7 +41,7 @@ image_info = get_test_image_info()
 
 ### Real Image Testing
 - **Before**: Used 1x1 pixel PNG (artificial test data)
-- **After**: Uses real `image/test_image.png` (165KB file)
+- **After**: Uses real `test_files/test_image.png` (165KB file)
 - **Benefits**: Tests with actual production-like data
 
 ### Standalone Testing Script

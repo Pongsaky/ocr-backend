@@ -169,7 +169,7 @@ Our integration tests make **actual HTTP requests** to live external services:
 ### Integration Test Features
 
 - **Auto-skip when API unavailable**: Tests gracefully skip if external APIs are down
-- **Real image processing**: Uses actual test images from `image/test_image.png`
+- **Real image processing**: Uses actual test images from `test_files/test_image.png`
 - **Concurrent testing**: Validates behavior under concurrent load
 - **Error handling**: Tests real error scenarios and recovery
 - **Clean base64 encoding**: Image encoding utilities with optional logging to avoid clutter

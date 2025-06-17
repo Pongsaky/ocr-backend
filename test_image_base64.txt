@@ -1,4 +1,4 @@
-Image file: image/test_image.png
+Image file: test_files/test_image.png
 Image size: 165513 bytes
 Base64 length: 220684 characters
 

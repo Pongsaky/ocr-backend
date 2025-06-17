@@ -1,0 +1,621 @@
+"""
+PDF OCR service for processing PDF files with comprehensive cleanup and error handling.
+"""
+
+import asyncio
+import time
+import gc
+from pathlib import Path
+from typing import List, Optional
+import tempfile
+import os
+
+import fitz  # PyMuPDF
+from PIL import Image
+import base64
+from io import BytesIO
+
+from app.logger_config import get_logger
+from app.models.ocr_models import (
+    PDFOCRRequest, PDFOCRResult, PDFPageResult,
+    PDFLLMOCRRequest, PDFLLMOCRResult, PDFPageLLMResult,
+    OCRRequest
+)
+from app.services.external_ocr_service import external_ocr_service
+from app.services.ocr_llm_service import ocr_llm_service
+from config.settings import get_settings
+
+logger = get_logger(__name__)
+settings = get_settings()
+
+
+class PDFProcessingContext:
+    """Context manager for PDF processing resources."""
+    
+    def __init__(self):
+        """Initialize processing context."""
+        self.temp_files: List[Path] = []
+        self.pdf_document: Optional[fitz.Document] = None
+        
+    async def __aenter__(self):
+        """Enter context manager."""
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager and cleanup all resources."""
+        await self.cleanup_all()
+        
+    def add_temp_file(self, file_path: Path) -> None:
+        """Add a temporary file to track for cleanup."""
+        self.temp_files.append(file_path)
+        
+    async def cleanup_all(self) -> None:
+        """Clean up all tracked resources."""
+        cleanup_errors = []
+        
+        # Close PDF document
+        if self.pdf_document:
+            try:
+                self.pdf_document.close()
+                logger.debug("Closed PDF document")
+            except Exception as e:
+                cleanup_errors.append(f"PDF document: {e}")
+        
+        # Clean up temporary files
+        for temp_file in self.temp_files:
+            try:
+                if temp_file.exists():
+                    temp_file.unlink()
+                    logger.debug(f"Cleaned up temp file: {temp_file}")
+            except Exception as e:
+                cleanup_errors.append(f"{temp_file}: {e}")
+        
+        # Force garbage collection
+        gc.collect()
+        
+        if cleanup_errors:
+            logger.warning(f"Some cleanup errors occurred: {cleanup_errors}")
+        else:
+            logger.debug(f"Successfully cleaned up {len(self.temp_files)} temp files")
+
+
+class PDFOCRService:
+    """Service for processing PDF files with OCR."""
+    
+    def __init__(self):
+        """Initialize PDF OCR service."""
+        self.settings = settings
+        logger.info("PDF OCR Service initialized")
+    
+    async def process_pdf(
+        self, 
+        pdf_path: Path, 
+        request: PDFOCRRequest
+    ) -> PDFOCRResult:
+        """
+        Process PDF file and extract text from each page.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            request: PDF OCR processing parameters
+            
+        Returns:
+            PDFOCRResult: Complete PDF processing result
+        """
+        start_time = time.time()
+        
+        async with PDFProcessingContext() as context:
+            try:
+                logger.info(f"Starting PDF OCR processing: {pdf_path}")
+                
+                # 1. Validate PDF and get page count
+                page_count = await self._validate_and_get_page_count(pdf_path)
+                logger.info(f"PDF has {page_count} pages")
+                
+                # 2. Convert PDF to images
+                pdf_start_time = time.time()
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                pdf_processing_time = time.time() - pdf_start_time
+                
+                logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
+                
+                # 3. Process images in batches for memory efficiency
+                ocr_start_time = time.time()
+                page_results = await self._process_images_batch(temp_images, request)
+                ocr_processing_time = time.time() - ocr_start_time
+                
+                total_processing_time = time.time() - start_time
+                processed_pages = sum(1 for result in page_results if result.success)
+                
+                logger.info(
+                    f"PDF processing completed: {processed_pages}/{page_count} pages successful "
+                    f"in {total_processing_time:.2f}s"
+                )
+                
+                return PDFOCRResult(
+                    success=processed_pages > 0,
+                    total_pages=page_count,
+                    processed_pages=processed_pages,
+                    results=page_results,
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=pdf_processing_time,
+                    ocr_processing_time=ocr_processing_time,
+                    dpi_used=request.dpi
+                )
+                
+            except Exception as e:
+                total_processing_time = time.time() - start_time
+                logger.error(f"PDF processing failed: {str(e)}")
+                
+                return PDFOCRResult(
+                    success=False,
+                    total_pages=0,
+                    processed_pages=0,
+                    results=[],
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=0.0,
+                    ocr_processing_time=0.0,
+                    dpi_used=request.dpi
+                )
+    
+    async def process_pdf_with_llm(
+        self, 
+        pdf_path: Path, 
+        request: PDFLLMOCRRequest
+    ) -> PDFLLMOCRResult:
+        """
+        Process PDF file with LLM-enhanced OCR.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            request: PDF LLM OCR processing parameters
+            
+        Returns:
+            PDFLLMOCRResult: Complete PDF LLM processing result
+        """
+        start_time = time.time()
+        
+        async with PDFProcessingContext() as context:
+            try:
+                logger.info(f"Starting PDF LLM OCR processing: {pdf_path}")
+                
+                # 1. Validate PDF and get page count
+                page_count = await self._validate_and_get_page_count(pdf_path)
+                logger.info(f"PDF has {page_count} pages")
+                
+                # 2. Convert PDF to images
+                pdf_start_time = time.time()
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                pdf_processing_time = time.time() - pdf_start_time
+                
+                logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
+                
+                # 3. Process images in batches with LLM for memory efficiency
+                ocr_start_time = time.time()
+                page_results = await self._process_images_batch_with_llm(temp_images, request)
+                ocr_processing_time = time.time() - ocr_start_time
+                
+                total_processing_time = time.time() - start_time
+                processed_pages = sum(1 for result in page_results if result.success)
+                
+                logger.info(
+                    f"PDF LLM processing completed: {processed_pages}/{page_count} pages successful "
+                    f"in {total_processing_time:.2f}s"
+                )
+                
+                return PDFLLMOCRResult(
+                    success=processed_pages > 0,
+                    total_pages=page_count,
+                    processed_pages=processed_pages,
+                    results=page_results,
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=pdf_processing_time,
+                    ocr_processing_time=ocr_processing_time,
+                    dpi_used=request.dpi,
+                    model_used=request.model,
+                    prompt_used=request.prompt
+                )
+                
+            except Exception as e:
+                total_processing_time = time.time() - start_time
+                logger.error(f"PDF LLM processing failed: {str(e)}")
+                
+                return PDFLLMOCRResult(
+                    success=False,
+                    total_pages=0,
+                    processed_pages=0,
+                    results=[],
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=0.0,
+                    ocr_processing_time=0.0,
+                    dpi_used=request.dpi,
+                    model_used=request.model,
+                    prompt_used=request.prompt
+                )
+    
+    async def _process_images_batch_with_llm(
+        self, 
+        image_paths: List[Path], 
+        request: PDFLLMOCRRequest
+    ) -> List[PDFPageLLMResult]:
+        """
+        Process images in batches with LLM for memory efficiency.
+        
+        Args:
+            image_paths: List of image file paths
+            request: PDF LLM OCR processing parameters
+            
+        Returns:
+            List[PDFPageLLMResult]: Results for each page
+        """
+        results = []
+        batch_size = settings.PDF_BATCH_SIZE
+        
+        # Convert PDF request to OCR request
+        ocr_request = OCRRequest(
+            threshold=request.threshold,
+            contrast_level=request.contrast_level
+        )
+        
+        # Process images in batches
+        for i in range(0, len(image_paths), batch_size):
+            batch = image_paths[i:i + batch_size]
+            logger.info(f"Processing batch {i//batch_size + 1} with LLM: pages {i+1}-{min(i+batch_size, len(image_paths))}")
+            
+            # Process batch concurrently
+            batch_tasks = [
+                self._process_single_image_with_llm(img_path, idx + i + 1, ocr_request, request)
+                for idx, img_path in enumerate(batch)
+            ]
+            
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+            
+            # Handle results and exceptions
+            for idx, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Page {i + idx + 1} LLM processing failed: {result}")
+                    results.append(PDFPageLLMResult(
+                        page_number=i + idx + 1,
+                        extracted_text="",
+                        enhanced_text="",
+                        processing_time=0.0,
+                        success=False,
+                        error_message=str(result),
+                        threshold_used=request.threshold,
+                        contrast_level_used=request.contrast_level,
+                        model_used=request.model
+                    ))
+                else:
+                    results.append(result)
+            
+            # Force garbage collection between batches
+            gc.collect()
+            
+            logger.info(f"Completed LLM batch {i//batch_size + 1}")
+        
+        return results
+    
+    async def _process_single_image_with_llm(
+        self, 
+        image_path: Path, 
+        page_number: int, 
+        ocr_request: OCRRequest,
+        llm_request: PDFLLMOCRRequest
+    ) -> PDFPageLLMResult:
+        """
+        Process a single image with OCR and LLM enhancement.
+        
+        Args:
+            image_path: Path to image file
+            page_number: PDF page number (1-indexed)
+            ocr_request: OCR processing parameters
+            llm_request: LLM processing parameters
+            
+        Returns:
+            PDFPageLLMResult: Processing result for the page
+        """
+        start_time = time.time()
+        
+        try:
+            logger.debug(f"Processing page {page_number} with LLM: {image_path}")
+            
+            # Process image with external OCR service
+            ocr_result = await external_ocr_service.process_image(image_path, ocr_request)
+            
+            if not ocr_result.success:
+                logger.warning(f"Page {page_number} OCR failed, cannot proceed with LLM")
+                processing_time = time.time() - start_time
+                return PDFPageLLMResult(
+                    page_number=page_number,
+                    extracted_text="",
+                    enhanced_text="",
+                    processing_time=processing_time,
+                    success=False,
+                    error_message="OCR processing failed",
+                    threshold_used=ocr_result.threshold_used,
+                    contrast_level_used=ocr_result.contrast_level_used,
+                    model_used=llm_request.model
+                )
+            
+            # Process OCR result with LLM
+            llm_result = await ocr_llm_service.process_text(
+                ocr_result.extracted_text,
+                llm_request.prompt,
+                llm_request.model
+            )
+            
+            processing_time = time.time() - start_time
+            
+            if llm_result.success:
+                logger.debug(f"Page {page_number} processed with LLM successfully in {processing_time:.2f}s")
+                return PDFPageLLMResult(
+                    page_number=page_number,
+                    extracted_text=ocr_result.extracted_text,
+                    enhanced_text=llm_result.enhanced_text,
+                    processing_time=processing_time,
+                    success=True,
+                    error_message=None,
+                    threshold_used=ocr_result.threshold_used,
+                    contrast_level_used=ocr_result.contrast_level_used,
+                    model_used=llm_request.model
+                )
+            else:
+                logger.warning(f"Page {page_number} LLM enhancement failed")
+                return PDFPageLLMResult(
+                    page_number=page_number,
+                    extracted_text=ocr_result.extracted_text,
+                    enhanced_text="",
+                    processing_time=processing_time,
+                    success=False,
+                    error_message="LLM enhancement failed",
+                    threshold_used=ocr_result.threshold_used,
+                    contrast_level_used=ocr_result.contrast_level_used,
+                    model_used=llm_request.model
+                )
+                
+        except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"Page {page_number} LLM processing failed: {str(e)}")
+            
+            return PDFPageLLMResult(
+                page_number=page_number,
+                extracted_text="",
+                enhanced_text="",
+                processing_time=processing_time,
+                success=False,
+                error_message=str(e),
+                threshold_used=ocr_request.threshold,
+                contrast_level_used=ocr_request.contrast_level,
+                model_used=llm_request.model
+            )
+    
+    async def _validate_and_get_page_count(self, pdf_path: Path) -> int:
+        """
+        Validate PDF file and get page count.
+        
+        Args:
+            pdf_path: Path to PDF file
+            
+        Returns:
+            int: Number of pages in PDF
+            
+        Raises:
+            ValueError: If PDF is invalid or has too many pages
+        """
+        try:
+            if not pdf_path.exists():
+                raise ValueError(f"PDF file not found: {pdf_path}")
+            
+            # Check file size
+            file_size = pdf_path.stat().st_size
+            if file_size > settings.MAX_PDF_SIZE:
+                raise ValueError(
+                    f"PDF file too large: {file_size} bytes. "
+                    f"Maximum allowed: {settings.MAX_PDF_SIZE} bytes"
+                )
+            
+            # Open and validate PDF
+            doc = fitz.open(pdf_path)
+            page_count = len(doc)
+            doc.close()
+            
+            if page_count == 0:
+                raise ValueError("PDF file has no pages")
+            
+            if page_count > settings.MAX_PDF_PAGES:
+                raise ValueError(
+                    f"PDF has too many pages: {page_count}. "
+                    f"Maximum allowed: {settings.MAX_PDF_PAGES} pages"
+                )
+            
+            logger.debug(f"PDF validation successful: {page_count} pages")
+            return page_count
+            
+        except Exception as e:
+            logger.error(f"PDF validation failed: {str(e)}")
+            raise ValueError(f"Invalid PDF file: {str(e)}")
+    
+    async def _pdf_to_images(
+        self, 
+        pdf_path: Path, 
+        dpi: int, 
+        context: PDFProcessingContext
+    ) -> List[Path]:
+        """
+        Convert PDF pages to images.
+        
+        Args:
+            pdf_path: Path to PDF file
+            dpi: DPI for image conversion
+            context: Processing context for resource management
+            
+        Returns:
+            List[Path]: Paths to temporary image files
+        """
+        temp_images = []
+        
+        try:
+            # Open PDF document
+            doc = fitz.open(pdf_path)
+            context.pdf_document = doc
+            
+            # Create temporary directory
+            temp_dir = Path(tempfile.mkdtemp(prefix="pdf_ocr_"))
+            context.add_temp_file(temp_dir)
+            
+            # Convert each page to image
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                
+                # Create matrix for DPI scaling
+                mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
+                
+                # Render page to pixmap
+                pix = page.get_pixmap(matrix=mat)
+                
+                # Save as PNG
+                img_path = temp_dir / f"page_{page_num + 1:03d}.png"
+                pix.save(str(img_path))
+                
+                temp_images.append(img_path)
+                context.add_temp_file(img_path)
+                
+                # Clean up pixmap
+                pix = None
+                
+                logger.debug(f"Converted PDF page {page_num + 1} to {img_path}")
+            
+            logger.info(f"Successfully converted {len(temp_images)} PDF pages to images")
+            return temp_images
+            
+        except Exception as e:
+            logger.error(f"PDF to images conversion failed: {str(e)}")
+            raise ValueError(f"Failed to convert PDF to images: {str(e)}")
+    
+    async def _process_images_batch(
+        self, 
+        image_paths: List[Path], 
+        request: PDFOCRRequest
+    ) -> List[PDFPageResult]:
+        """
+        Process images in batches for memory efficiency.
+        
+        Args:
+            image_paths: List of image file paths
+            request: PDF OCR processing parameters
+            
+        Returns:
+            List[PDFPageResult]: Results for each page
+        """
+        results = []
+        batch_size = settings.PDF_BATCH_SIZE
+        
+        # Convert PDF request to OCR request
+        ocr_request = OCRRequest(
+            threshold=request.threshold,
+            contrast_level=request.contrast_level
+        )
+        
+        # Process images in batches
+        for i in range(0, len(image_paths), batch_size):
+            batch = image_paths[i:i + batch_size]
+            logger.info(f"Processing batch {i//batch_size + 1}: pages {i+1}-{min(i+batch_size, len(image_paths))}")
+            
+            # Process batch concurrently
+            batch_tasks = [
+                self._process_single_image(img_path, idx + i + 1, ocr_request)
+                for idx, img_path in enumerate(batch)
+            ]
+            
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+            
+            # Handle results and exceptions
+            for idx, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Page {i + idx + 1} processing failed: {result}")
+                    results.append(PDFPageResult(
+                        page_number=i + idx + 1,
+                        extracted_text="",
+                        processing_time=0.0,
+                        success=False,
+                        error_message=str(result),
+                        threshold_used=request.threshold,
+                        contrast_level_used=request.contrast_level
+                    ))
+                else:
+                    results.append(result)
+            
+            # Force garbage collection between batches
+            gc.collect()
+            
+            logger.info(f"Completed batch {i//batch_size + 1}")
+        
+        return results
+    
+    async def _process_single_image(
+        self, 
+        image_path: Path, 
+        page_number: int, 
+        ocr_request: OCRRequest
+    ) -> PDFPageResult:
+        """
+        Process a single image with OCR.
+        
+        Args:
+            image_path: Path to image file
+            page_number: PDF page number (1-indexed)
+            ocr_request: OCR processing parameters
+            
+        Returns:
+            PDFPageResult: Processing result for the page
+        """
+        start_time = time.time()
+        
+        try:
+            logger.debug(f"Processing page {page_number}: {image_path}")
+            
+            # Process image with external OCR service
+            result = await external_ocr_service.process_image(image_path, ocr_request)
+            
+            processing_time = time.time() - start_time
+            
+            if result.success:
+                logger.debug(f"Page {page_number} processed successfully in {processing_time:.2f}s")
+                return PDFPageResult(
+                    page_number=page_number,
+                    extracted_text=result.extracted_text,
+                    processing_time=processing_time,
+                    success=True,
+                    error_message=None,
+                    threshold_used=result.threshold_used,
+                    contrast_level_used=result.contrast_level_used
+                )
+            else:
+                logger.warning(f"Page {page_number} OCR failed")
+                return PDFPageResult(
+                    page_number=page_number,
+                    extracted_text="",
+                    processing_time=processing_time,
+                    success=False,
+                    error_message="OCR processing failed",
+                    threshold_used=result.threshold_used,
+                    contrast_level_used=result.contrast_level_used
+                )
+                
+        except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"Page {page_number} processing failed: {str(e)}")
+            
+            return PDFPageResult(
+                page_number=page_number,
+                extracted_text="",
+                processing_time=processing_time,
+                success=False,
+                error_message=str(e),
+                threshold_used=ocr_request.threshold,
+                contrast_level_used=ocr_request.contrast_level
+            )
+
+
+# Global PDF OCR service instance
+pdf_ocr_service = PDFOCRService()

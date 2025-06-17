@@ -46,7 +46,7 @@ class ImageUtils:
     def get_test_image_path() -> str:
         """Get the path to the test image file."""
         project_root = Path(__file__).parent.parent.parent
-        test_image_path = project_root / "image" / "test_image.png"
+        test_image_path = project_root / "test_files" / "test_image.png"
         return str(test_image_path)
     
     @staticmethod

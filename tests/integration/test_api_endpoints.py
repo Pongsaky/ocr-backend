@@ -188,10 +188,28 @@ class TestOCRAPIEndpoints:
         
         assert response.status_code == 200
         data = response.json()
-        assert "threshold" in data
-        assert "contrast_level" in data
-        assert "supported_formats" in data
-        assert "max_file_size_bytes" in data
+        
+        # Check main sections exist
+        assert "image_processing" in data
+        assert "pdf_processing" in data
+        assert "llm_parameters" in data
+        assert "file_constraints" in data
+        
+        # Check image processing parameters
+        assert "threshold" in data["image_processing"]
+        assert "contrast_level" in data["image_processing"]
+        
+        # Check PDF processing parameters
+        assert "threshold" in data["pdf_processing"]
+        assert "contrast_level" in data["pdf_processing"]
+        assert "dpi" in data["pdf_processing"]
+        assert "max_pages" in data["pdf_processing"]
+        
+        # Check file constraints
+        assert "images" in data["file_constraints"]
+        assert "pdfs" in data["file_constraints"]
+        assert "supported_formats" in data["file_constraints"]["images"]
+        assert "max_file_size_bytes" in data["file_constraints"]["images"]
     
     def test_get_service_info(self, client):
         """Test get service info endpoint."""

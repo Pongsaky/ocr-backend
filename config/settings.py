@@ -63,6 +63,19 @@ class Settings(BaseSettings):
             '["jpg","jpeg","png","bmp","tiff","webp"]'
         )
     )
+    
+    # --- PDF Processing Settings ---
+    MAX_PDF_PAGES: int = int(os.getenv("MAX_PDF_PAGES", "10"))
+    MAX_PDF_SIZE: int = int(os.getenv("MAX_PDF_SIZE", "52428800"))  # 50MB
+    ALLOWED_PDF_EXTENSIONS: List[str] = json.loads(
+        os.getenv(
+            "ALLOWED_PDF_EXTENSIONS",
+            '["pdf"]'
+        )
+    )
+    PDF_DPI: int = int(os.getenv("PDF_DPI", "300"))  # For PDF to image conversion
+    PDF_IMAGE_FORMAT: str = os.getenv("PDF_IMAGE_FORMAT", "PNG")
+    PDF_BATCH_SIZE: int = int(os.getenv("PDF_BATCH_SIZE", "3"))  # Process images in batches
 
     # --- File Storage Settings ---
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
