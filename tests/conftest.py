@@ -17,12 +17,8 @@ from app.main import app
 from app.models.ocr_models import OCRRequest, OCRResult
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# Removed custom event_loop fixture to avoid deprecation warnings
+# pytest-asyncio provides its own event loop management
 
 
 @pytest.fixture

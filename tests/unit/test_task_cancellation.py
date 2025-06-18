@@ -4,7 +4,7 @@ Unit tests for task cancellation functionality.
 
 import asyncio
 import pytest
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 from fastapi import HTTPException
@@ -43,7 +43,7 @@ class TestTaskCancellation:
     async def test_cancel_ocr_task_success(self, controller, mock_task_id, cancel_request):
         """Test successful OCR task cancellation."""
         # Create a task
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         task = OCRResponse(
             task_id=mock_task_id,
             status="processing",
@@ -88,8 +88,8 @@ class TestTaskCancellation:
             status="completed",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+            created_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC)
         )
         controller.tasks[mock_task_id] = task
 
@@ -111,7 +111,7 @@ class TestTaskCancellation:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         controller.pdf_tasks[mock_task_id] = task
@@ -141,7 +141,7 @@ class TestTaskCancellation:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         controller.pdf_llm_tasks[mock_task_id] = task
@@ -165,7 +165,7 @@ class TestTaskCancellation:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         controller.llm_tasks[mock_task_id] = task
@@ -189,7 +189,7 @@ class TestTaskCancellation:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         controller.pdf_tasks[mock_task_id] = task
@@ -332,7 +332,7 @@ class TestCancellationModels:
 
     def test_cancel_task_response(self):
         """Test CancelTaskResponse model."""
-        cancelled_at = datetime.utcnow()
+        cancelled_at = datetime.now(UTC)
         response = CancelTaskResponse(
             task_id="test-task",
             status="cancelled",

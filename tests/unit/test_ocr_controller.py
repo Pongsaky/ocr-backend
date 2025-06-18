@@ -5,7 +5,7 @@ Unit tests for the OCR controller.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import UploadFile, HTTPException
 
@@ -72,8 +72,8 @@ class TestOCRController:
             status="completed",
             result=sample_ocr_result,
             error_message=None,
-            created_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+            created_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC)
         )
         ocr_controller.tasks[task_id] = task_response
         
@@ -215,14 +215,14 @@ class TestOCRController:
             status="completed",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(UTC)
         )
         ocr_controller.tasks["task2"] = OCRResponse(
             task_id="task2",
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(UTC)
         )
         
         tasks = await ocr_controller.list_tasks()
@@ -240,21 +240,21 @@ class TestOCRController:
             status="completed",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(UTC)
         )
         ocr_controller.tasks["failed1"] = OCRResponse(
             task_id="failed1",
             status="failed",
             result=None,
             error_message="Error",
-            created_at=datetime.utcnow()
+            created_at=datetime.now(UTC)
         )
         ocr_controller.tasks["processing1"] = OCRResponse(
             task_id="processing1",
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(UTC)
         )
         
         count = await ocr_controller.cleanup_completed_tasks()

@@ -212,7 +212,7 @@ class ExternalOCRService:
                 
                 response = await client.post(
                     url,
-                    json=request.dict(),
+                    json=request.model_dump(),
                     headers={"Content-Type": "application/json"}
                 )
                 

@@ -5,7 +5,7 @@ Unit tests for PDF OCR Service.
 import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 
 from app.services.pdf_ocr_service import PDFOCRService

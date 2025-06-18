@@ -3,6 +3,7 @@ Main FastAPI application for OCR Backend API.
 """
 
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -27,6 +28,35 @@ logger = setup_logger(__name__)
 
 logger.info(f"Starting {settings.PROJECT_NAME} in {settings.APP_ENV} mode...")
 
+# --- Create required directories ---
+def create_directories():
+    """Create required directories for file storage."""
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.TEMP_DIR).mkdir(parents=True, exist_ok=True)
+    Path("logs").mkdir(parents=True, exist_ok=True)
+    logger.info("Required directories created/verified")
+
+
+# --- Application Lifespan Manager ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager (replaces deprecated startup/shutdown events).
+    """
+    # Startup
+    logger.info("Application startup initiated...")
+    create_directories()
+    logger.info("Application startup complete.")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Application shutdown initiated...")
+    # Add cleanup logic here if needed
+    await asyncio.sleep(0.1)  # Small delay for tasks to finish
+    logger.info("Application shutdown complete.")
+
 # --- Initialize FastAPI App ---
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -36,7 +66,8 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    root_path="/ocr-backend"
+    root_path="/ocr-backend",
+    lifespan=lifespan
 )
 
 # --- Configure CORS ---
@@ -65,15 +96,6 @@ register_error_handlers(app)
 # --- Add Request ID Middleware ---
 logger.info("Adding request ID middleware...")
 app.add_middleware(RequestIDMiddleware)
-
-# --- Create required directories ---
-def create_directories():
-    """Create required directories for file storage."""
-    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
-    Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
-    Path(settings.TEMP_DIR).mkdir(parents=True, exist_ok=True)
-    Path("logs").mkdir(parents=True, exist_ok=True)
-    logger.info("Required directories created/verified")
 
 # --- Include Routers ---
 logger.info("Including API routers...")
@@ -113,22 +135,8 @@ async def health_check():
         "llm_service_status": llm_service_status
     }
 
-# --- Startup Event Handler ---
-@app.on_event("startup")
-async def startup_event():
-    """Handles application startup tasks."""
-    logger.info("Application startup initiated...")
-    create_directories()
-    logger.info("Application startup complete.")
-
-# --- Shutdown Event Handler ---
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Handles graceful shutdown tasks."""
-    logger.info("Application shutdown initiated...")
-    # Add cleanup logic here if needed
-    await asyncio.sleep(0.1)  # Small delay for tasks to finish
-    logger.info("Application shutdown complete.")
+# --- Deprecated Event Handlers Removed ---
+# Replaced with lifespan context manager above
 
 # --- Direct Run Configuration (for development/debugging) ---
 if __name__ == "__main__":

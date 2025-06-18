@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 import tempfile
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 
 import fitz  # PyMuPDF
 from PIL import Image
@@ -743,7 +743,7 @@ class PDFOCRService:
                         estimated_time_remaining=None,
                         processing_speed=None,
                         error_message=None,
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -780,7 +780,7 @@ class PDFOCRService:
                         estimated_time_remaining=0.0,
                         processing_speed=page_count / total_processing_time if total_processing_time > 0 else 0.0,
                         error_message=None,
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -823,7 +823,7 @@ class PDFOCRService:
                         estimated_time_remaining=None,
                         processing_speed=None,
                         error_message=str(e),
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -886,7 +886,7 @@ class PDFOCRService:
                         estimated_time_remaining=None,
                         processing_speed=None,
                         error_message=None,
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -926,7 +926,7 @@ class PDFOCRService:
                         estimated_time_remaining=0.0,
                         processing_speed=page_count / total_processing_time if total_processing_time > 0 else 0.0,
                         error_message=None,
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -972,7 +972,7 @@ class PDFOCRService:
                         estimated_time_remaining=None,
                         processing_speed=None,
                         error_message=str(e),
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -1072,7 +1072,7 @@ class PDFOCRService:
                     error_message=None if result.success else "OCR processing failed",
                     threshold_used=result.threshold_used,
                     contrast_level_used=result.contrast_level_used,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(UTC)
                 )
                 
                 streaming_results.append(stream_result)
@@ -1100,7 +1100,7 @@ class PDFOCRService:
                         estimated_time_remaining=estimated_remaining,
                         processing_speed=processing_speed,
                         error_message=None,
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -1132,7 +1132,7 @@ class PDFOCRService:
                     error_message=str(e),
                     threshold_used=request.threshold,
                     contrast_level_used=request.contrast_level,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(UTC)
                 )
                 
                 streaming_results.append(stream_result)
@@ -1158,7 +1158,7 @@ class PDFOCRService:
                         estimated_time_remaining=None,
                         processing_speed=processing_speed,
                         error_message=f"Page {page_num} failed: {str(e)}",
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
         
@@ -1226,7 +1226,7 @@ class PDFOCRService:
                     contrast_level_used=result.contrast_level_used,
                     model_used=result.model_used,
                     prompt_used=result.prompt_used,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(UTC)
                 )
                 
                 streaming_results.append(stream_result)
@@ -1254,7 +1254,7 @@ class PDFOCRService:
                         estimated_time_remaining=estimated_remaining,
                         processing_speed=processing_speed,
                         error_message=None,
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
                 
@@ -1296,7 +1296,7 @@ class PDFOCRService:
                     contrast_level_used=request.contrast_level,
                     model_used=request.model or settings.OCR_LLM_MODEL,
                     prompt_used=request.prompt or settings.OCR_LLM_DEFAULT_PROMPT,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(UTC)
                 )
                 
                 streaming_results.append(stream_result)
@@ -1322,7 +1322,7 @@ class PDFOCRService:
                         estimated_time_remaining=None,
                         processing_speed=processing_speed,
                         error_message=f"Page {page_num} failed: {str(e)}",
-                        timestamp=datetime.utcnow()
+                        timestamp=datetime.now(UTC)
                     )
                 )
         

@@ -5,7 +5,7 @@ Unit tests for PDF streaming functionality.
 import asyncio
 import json
 import pytest
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import List
@@ -34,7 +34,7 @@ class TestPDFStreamingModels:
             error_message=None,
             threshold_used=500,
             contrast_level_used=1.3,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         assert result.page_number == 1
@@ -55,7 +55,7 @@ class TestPDFStreamingModels:
             success=True,
             threshold_used=500,
             contrast_level_used=1.3,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         status = PDFStreamingStatus(
@@ -71,7 +71,7 @@ class TestPDFStreamingModels:
             estimated_time_remaining=5.0,
             processing_speed=0.2,
             error_message=None,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         assert status.task_id == "test-task-123"
@@ -100,7 +100,7 @@ class TestPDFStreamingModels:
             contrast_level_used=1.3,
             model_used="test-model",
             prompt_used="test prompt",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         status = PDFLLMStreamingStatus(
@@ -113,7 +113,7 @@ class TestPDFStreamingModels:
             latest_page_result=page_result,
             cumulative_results=[page_result],
             progress_percentage=50.0,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         assert status.task_id == "test-llm-task-123"
@@ -154,7 +154,7 @@ class TestPDFOCRServiceStreaming:
             failed_pages=0,
             cumulative_results=[],
             progress_percentage=0.0,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         await pdf_service._send_streaming_update(streaming_queue, status)
@@ -177,7 +177,7 @@ class TestPDFOCRServiceStreaming:
             failed_pages=0,
             cumulative_results=[],
             progress_percentage=0.0,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         await pdf_service._send_llm_streaming_update(streaming_queue, status)
@@ -239,7 +239,7 @@ class TestOCRControllerStreaming:
             failed_pages=0,
             cumulative_results=[],
             progress_percentage=50.0,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         await queue.put(test_status)

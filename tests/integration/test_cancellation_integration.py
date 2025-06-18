@@ -5,7 +5,7 @@ Integration tests for task cancellation API endpoints.
 import asyncio
 import pytest
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
@@ -53,7 +53,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[mock_task_id] = task
@@ -90,8 +90,8 @@ class TestCancellationAPIEndpoints:
             status="completed",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+            created_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC)
         )
         ocr_controller.tasks[mock_task_id] = task
 
@@ -112,7 +112,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[mock_task_id] = task
@@ -136,7 +136,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.llm_tasks[mock_task_id] = task
@@ -166,7 +166,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.pdf_tasks[mock_task_id] = task
@@ -194,7 +194,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.pdf_llm_tasks[mock_task_id] = task
@@ -223,7 +223,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.pdf_tasks[mock_task_id] = task
@@ -261,7 +261,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[mock_task_id] = task
@@ -284,7 +284,7 @@ class TestCancellationAPIEndpoints:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[mock_task_id] = task
@@ -362,7 +362,7 @@ class TestCancellationWorkflow:
         if initial_status in ["completed", "failed"]:
             from app.controllers.ocr_controller import ocr_controller
             from app.models.ocr_models import OCRResponse
-            from datetime import datetime
+            from datetime import datetime, UTC
             
             # Create a mock processing task for cancellation test
             test_task = OCRResponse(
@@ -370,7 +370,7 @@ class TestCancellationWorkflow:
                 status="processing",
                 result=None,
                 error_message=None,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
                 completed_at=None
             )
             ocr_controller.tasks[task_id] = test_task
@@ -406,7 +406,7 @@ class TestCancellationWorkflow:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.pdf_tasks[task_id] = task
@@ -434,7 +434,7 @@ class TestCancellationWorkflow:
                 status="processing",
                 result=None,
                 error_message=None,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
                 completed_at=None
             )
             ocr_controller.tasks[task_id] = task
@@ -480,7 +480,7 @@ class TestCancellationEdgeCases:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[task_id] = task
@@ -510,7 +510,7 @@ class TestCancellationEdgeCases:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[task_id] = task
@@ -535,7 +535,7 @@ class TestCancellationEdgeCases:
             status="processing",
             result=None,
             error_message=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             completed_at=None
         )
         ocr_controller.tasks[task_id] = task

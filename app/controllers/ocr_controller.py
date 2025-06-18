@@ -6,7 +6,7 @@ import uuid
 import asyncio
 import time
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Dict, Optional, AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
@@ -70,7 +70,7 @@ class OCRController:
         """
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         
         logger.info(f"Starting OCR task {task_id} for file {file.filename}")
         
@@ -110,7 +110,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.tasks[task_id] = error_response
@@ -273,7 +273,7 @@ class OCRController:
             )
             
             # Update task with result
-            completed_at = datetime.utcnow()
+            completed_at = datetime.now(UTC)
             
             self.tasks[task_id] = OCRResponse(
                 task_id=task_id,
@@ -296,7 +296,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=self.tasks[task_id].created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
         
         finally:
@@ -325,7 +325,7 @@ class OCRController:
         """
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         
         logger.info(f"Starting LLM OCR task {task_id} for file {file.filename}")
         
@@ -365,7 +365,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.llm_tasks[task_id] = error_response
@@ -503,7 +503,7 @@ class OCRController:
             )
             
             # Update task with result
-            completed_at = datetime.utcnow()
+            completed_at = datetime.now(UTC)
             
             self.llm_tasks[task_id] = OCRLLMResponse(
                 task_id=task_id,
@@ -526,7 +526,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=self.llm_tasks[task_id].created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
         
         finally:
@@ -624,7 +624,7 @@ class OCRController:
         """
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         
         logger.info(f"Starting PDF OCR task {task_id} for file {file.filename}")
         
@@ -664,7 +664,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_tasks[task_id] = error_response
@@ -742,7 +742,7 @@ class OCRController:
         """
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         
         logger.info(f"Starting PDF LLM OCR task {task_id} for file {file.filename}")
         
@@ -782,7 +782,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_llm_tasks[task_id] = error_response
@@ -910,7 +910,7 @@ class OCRController:
             result = await pdf_ocr_service.process_pdf(pdf_path, pdf_request)
             
             # Update task with result
-            completed_at = datetime.utcnow()
+            completed_at = datetime.now(UTC)
             
             self.pdf_tasks[task_id] = PDFOCRResponse(
                 task_id=task_id,
@@ -933,7 +933,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=self.pdf_tasks[task_id].created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
         
         finally:
@@ -966,7 +966,7 @@ class OCRController:
             result = await pdf_ocr_service.process_pdf_with_llm(pdf_path, pdf_llm_request)
             
             # Update task with result
-            completed_at = datetime.utcnow()
+            completed_at = datetime.now(UTC)
             
             self.pdf_llm_tasks[task_id] = PDFLLMOCRResponse(
                 task_id=task_id,
@@ -989,7 +989,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=self.pdf_llm_tasks[task_id].created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_llm_tasks[task_id] = error_response
@@ -1077,7 +1077,7 @@ class OCRController:
         """
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         
         logger.info(f"Starting streaming PDF OCR task {task_id} for file {file.filename}")
         
@@ -1121,7 +1121,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_tasks[task_id] = error_response
@@ -1147,7 +1147,7 @@ class OCRController:
         """
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(UTC)
         
         logger.info(f"Starting streaming PDF LLM OCR task {task_id} for file {file.filename}")
         
@@ -1191,7 +1191,7 @@ class OCRController:
                 result=None,
                 error_message=str(e),
                 created_at=created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_llm_tasks[task_id] = error_response
@@ -1238,7 +1238,7 @@ class OCRController:
                     
                 except asyncio.TimeoutError:
                     # Send keepalive
-                    yield f"data: {json.dumps({'keepalive': True, 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+                    yield f"data: {json.dumps({'keepalive': True, 'timestamp': datetime.now(UTC).isoformat()})}\n\n"
                     logger.debug(f"Sent keepalive for task {task_id}")
                     
         except Exception as e:
@@ -1291,7 +1291,7 @@ class OCRController:
                 result=result,
                 error_message=None if result.success else "Processing completed with errors",
                 created_at=self.pdf_tasks[task_id].created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_tasks[task_id] = completed_response
@@ -1307,8 +1307,8 @@ class OCRController:
                 status="failed",
                 result=None,
                 error_message=str(e),
-                created_at=self.pdf_tasks[task_id].created_at if task_id in self.pdf_tasks else datetime.utcnow(),
-                completed_at=datetime.utcnow()
+                created_at=self.pdf_tasks[task_id].created_at if task_id in self.pdf_tasks else datetime.now(UTC),
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_tasks[task_id] = error_response
@@ -1357,7 +1357,7 @@ class OCRController:
                 result=result,
                 error_message=None if result.success else "Processing completed with errors",
                 created_at=self.pdf_llm_tasks[task_id].created_at,
-                completed_at=datetime.utcnow()
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_llm_tasks[task_id] = completed_response
@@ -1373,8 +1373,8 @@ class OCRController:
                 status="failed",
                 result=None,
                 error_message=str(e),
-                created_at=self.pdf_llm_tasks[task_id].created_at if task_id in self.pdf_llm_tasks else datetime.utcnow(),
-                completed_at=datetime.utcnow()
+                created_at=self.pdf_llm_tasks[task_id].created_at if task_id in self.pdf_llm_tasks else datetime.now(UTC),
+                completed_at=datetime.now(UTC)
             )
             
             self.pdf_llm_tasks[task_id] = error_response
@@ -1428,7 +1428,7 @@ class OCRController:
         self.cancellation_reasons[task_id] = reason
         
         # Update task status
-        cancelled_at = datetime.utcnow()
+        cancelled_at = datetime.now(UTC)
         task.status = TaskStatus.CANCELLED
         task.cancellation_reason = reason
         task.cancelled_at = cancelled_at
@@ -1475,7 +1475,7 @@ class OCRController:
         self.cancellation_reasons[task_id] = reason
         
         # Update task status
-        cancelled_at = datetime.utcnow()
+        cancelled_at = datetime.now(UTC)
         task.status = TaskStatus.CANCELLED
         task.cancellation_reason = reason
         task.cancelled_at = cancelled_at
@@ -1529,7 +1529,7 @@ class OCRController:
         self.cancellation_reasons[task_id] = reason
         
         # Update task status
-        cancelled_at = datetime.utcnow()
+        cancelled_at = datetime.now(UTC)
         task.status = TaskStatus.CANCELLED
         task.cancellation_reason = reason
         task.cancelled_at = cancelled_at
@@ -1583,7 +1583,7 @@ class OCRController:
         self.cancellation_reasons[task_id] = reason
         
         # Update task status
-        cancelled_at = datetime.utcnow()
+        cancelled_at = datetime.now(UTC)
         task.status = TaskStatus.CANCELLED
         task.cancellation_reason = reason
         task.cancelled_at = cancelled_at
