@@ -190,7 +190,7 @@ class OCRController:
                 processed_image_base64=processed_result.processed_image_base64,
                 original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
-                ocr_processing_time=processed_result.processing_time
+                image_processing_time=processed_result.processing_time
             )
             
             # Cleanup temporary file
@@ -260,7 +260,7 @@ class OCRController:
                 processed_image_base64=processed_result.processed_image_base64,
                 original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
-                ocr_processing_time=processed_result.processing_time
+                image_processing_time=processed_result.processing_time
             )
             
             # Convert LLM result to OCR result format
@@ -438,7 +438,7 @@ class OCRController:
                 processed_image_base64=processed_result.processed_image_base64,
                 original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
-                ocr_processing_time=processed_result.processing_time
+                image_processing_time=processed_result.processing_time
             )
             
             # Cleanup temporary file
@@ -499,7 +499,7 @@ class OCRController:
                 processed_image_base64=processed_result.processed_image_base64,
                 original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
-                ocr_processing_time=processed_result.processing_time
+                image_processing_time=processed_result.processing_time
             )
             
             # Update task with result

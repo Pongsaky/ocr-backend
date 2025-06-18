@@ -60,7 +60,7 @@ request: {
   ],
   "total_processing_time": 15.67,
   "pdf_processing_time": 4.23,
-  "ocr_processing_time": 11.44,
+  "image_processing_time": 11.44,
   "dpi_used": 300
 }
 ```
@@ -207,7 +207,7 @@ Monitor these metrics for optimization:
 
 - `total_processing_time`: Overall processing duration
 - `pdf_processing_time`: Time spent converting PDF to images
-- `ocr_processing_time`: Time spent on OCR processing
+- `image_processing_time`: Time spent on OCR processing
 - `processing_time` per page: Individual page processing time
 
 ## Advanced Usage Patterns

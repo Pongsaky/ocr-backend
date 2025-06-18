@@ -129,7 +129,7 @@ class PDFOCRService:
                 # 3. Process images in batches for memory efficiency
                 ocr_start_time = time.time()
                 page_results = await self._process_images_batch(temp_images, request)
-                ocr_processing_time = time.time() - ocr_start_time
+                image_processing_time = time.time() - ocr_start_time
                 
                 total_processing_time = time.time() - start_time
                 processed_pages = sum(1 for result in page_results if result.success)
@@ -146,7 +146,7 @@ class PDFOCRService:
                     results=page_results,
                     total_processing_time=total_processing_time,
                     pdf_processing_time=pdf_processing_time,
-                    ocr_processing_time=ocr_processing_time,
+                    image_processing_time=image_processing_time,
                     dpi_used=request.dpi
                 )
                 
@@ -161,7 +161,7 @@ class PDFOCRService:
                     results=[],
                     total_processing_time=total_processing_time,
                     pdf_processing_time=0.0,
-                    ocr_processing_time=0.0,
+                    image_processing_time=0.0,
                     dpi_used=request.dpi
                 )
     
@@ -456,7 +456,7 @@ class PDFOCRService:
                 # 3. Process images with LLM in batches for memory efficiency
                 ocr_start_time = time.time()
                 page_results = await self._process_images_batch_with_llm(temp_images, request)
-                ocr_processing_time = time.time() - ocr_start_time
+                image_processing_time = time.time() - ocr_start_time
                 
                 # 4. Calculate LLM processing time from page results
                 llm_processing_time = sum(result.llm_processing_time for result in page_results if result.success)
@@ -476,7 +476,7 @@ class PDFOCRService:
                     results=page_results,
                     total_processing_time=total_processing_time,
                     pdf_processing_time=pdf_processing_time,
-                    ocr_processing_time=ocr_processing_time,
+                    image_processing_time=image_processing_time,
                     llm_processing_time=llm_processing_time,
                     dpi_used=request.dpi,
                     model_used=request.model or settings.OCR_LLM_MODEL,
@@ -494,7 +494,7 @@ class PDFOCRService:
                     results=[],
                     total_processing_time=total_processing_time,
                     pdf_processing_time=0.0,
-                    ocr_processing_time=0.0,
+                    image_processing_time=0.0,
                     llm_processing_time=0.0,
                     dpi_used=request.dpi,
                     model_used=request.model or settings.OCR_LLM_MODEL,
@@ -549,7 +549,7 @@ class PDFOCRService:
                         extracted_text="",
                         original_ocr_text="",
                         processing_time=0.0,
-                        ocr_processing_time=0.0,
+                        image_processing_time=0.0,
                         llm_processing_time=0.0,
                         success=False,
                         error_message=str(result),
@@ -604,7 +604,7 @@ class PDFOCRService:
                 processed_data["processed_image_base64"],
                 processed_data["original_ocr_text"],
                 ocr_llm_request,
-                processed_data["ocr_processing_time"]
+                processed_data["image_processing_time"]
             )
             
             total_processing_time = time.time() - start_time
@@ -616,7 +616,7 @@ class PDFOCRService:
                     extracted_text=llm_result.extracted_text,
                     original_ocr_text=llm_result.original_ocr_text,
                     processing_time=total_processing_time,
-                    ocr_processing_time=llm_result.ocr_processing_time,
+                    image_processing_time=llm_result.image_processing_time,
                     llm_processing_time=llm_result.llm_processing_time,
                     success=True,
                     error_message=None,
@@ -632,7 +632,7 @@ class PDFOCRService:
                     extracted_text="",
                     original_ocr_text=llm_result.original_ocr_text,
                     processing_time=total_processing_time,
-                    ocr_processing_time=llm_result.ocr_processing_time,
+                    image_processing_time=llm_result.image_processing_time,
                     llm_processing_time=llm_result.llm_processing_time,
                     success=False,
                     error_message="LLM processing failed",
@@ -651,7 +651,7 @@ class PDFOCRService:
                 extracted_text="",
                 original_ocr_text="",
                 processing_time=total_processing_time,
-                ocr_processing_time=0.0,
+                image_processing_time=0.0,
                 llm_processing_time=0.0,
                 success=False,
                 error_message=str(e),
@@ -678,22 +678,22 @@ class PDFOCRService:
             # Use external service for image preprocessing
             processed_result = await external_ocr_service.process_image(image_path, ocr_request)
             
-            ocr_processing_time = time.time() - start_time
+            image_processing_time = time.time() - start_time
             
             return {
                 "processed_image_base64": processed_result.processed_image_base64 if processed_result.success else "",
                 "original_ocr_text": "",  # No original text from preprocessing service
-                "ocr_processing_time": ocr_processing_time
+                "image_processing_time": image_processing_time
             }
             
         except Exception as e:
             logger.error(f"Failed to process image for PDF LLM: {str(e)}")
-            ocr_processing_time = time.time() - start_time
+            image_processing_time = time.time() - start_time
             
             return {
                 "processed_image_base64": "",
                 "original_ocr_text": "",
-                "ocr_processing_time": ocr_processing_time
+                "image_processing_time": image_processing_time
             }
 
     # --- STREAMING METHODS ---
@@ -759,7 +759,7 @@ class PDFOCRService:
                 page_results, cumulative_stream_results = await self._process_images_with_streaming(
                     temp_images, request, task_id, progress_queue, start_time
                 )
-                ocr_processing_time = time.time() - ocr_start_time
+                image_processing_time = time.time() - ocr_start_time
                 
                 total_processing_time = time.time() - start_time
                 processed_pages = sum(1 for result in page_results if result.success)
@@ -799,7 +799,7 @@ class PDFOCRService:
                     results=page_results,
                     total_processing_time=total_processing_time,
                     pdf_processing_time=pdf_processing_time,
-                    ocr_processing_time=ocr_processing_time,
+                    image_processing_time=image_processing_time,
                     dpi_used=request.dpi
                 )
                 
@@ -837,7 +837,7 @@ class PDFOCRService:
                     results=[],
                     total_processing_time=total_processing_time,
                     pdf_processing_time=0.0,
-                    ocr_processing_time=0.0,
+                    image_processing_time=0.0,
                     dpi_used=request.dpi
                 )
 
@@ -902,7 +902,7 @@ class PDFOCRService:
                 page_results, cumulative_stream_results = await self._process_images_with_llm_streaming(
                     temp_images, request, task_id, progress_queue, start_time
                 )
-                ocr_processing_time = time.time() - ocr_start_time
+                image_processing_time = time.time() - ocr_start_time
                 
                 # 4. Calculate LLM processing time from page results
                 llm_processing_time = sum(result.llm_processing_time for result in page_results if result.success)
@@ -945,7 +945,7 @@ class PDFOCRService:
                     results=page_results,
                     total_processing_time=total_processing_time,
                     pdf_processing_time=pdf_processing_time,
-                    ocr_processing_time=ocr_processing_time,
+                    image_processing_time=image_processing_time,
                     llm_processing_time=llm_processing_time,
                     dpi_used=request.dpi,
                     model_used=request.model or settings.OCR_LLM_MODEL,
@@ -986,7 +986,7 @@ class PDFOCRService:
                     results=[],
                     total_processing_time=total_processing_time,
                     pdf_processing_time=0.0,
-                    ocr_processing_time=0.0,
+                    image_processing_time=0.0,
                     llm_processing_time=0.0,
                     dpi_used=request.dpi,
                     model_used=request.model or settings.OCR_LLM_MODEL,
@@ -1218,7 +1218,7 @@ class PDFOCRService:
                     extracted_text=result.extracted_text,
                     original_ocr_text=result.original_ocr_text,
                     processing_time=result.processing_time,
-                    ocr_processing_time=result.ocr_processing_time,
+                    image_processing_time=result.image_processing_time,
                     llm_processing_time=result.llm_processing_time,
                     success=result.success,
                     error_message=result.error_message,
@@ -1270,7 +1270,7 @@ class PDFOCRService:
                     extracted_text="",
                     original_ocr_text="",
                     processing_time=page_processing_time,
-                    ocr_processing_time=0.0,
+                    image_processing_time=0.0,
                     llm_processing_time=0.0,
                     success=False,
                     error_message=str(e),
@@ -1288,7 +1288,7 @@ class PDFOCRService:
                     extracted_text="",
                     original_ocr_text="",
                     processing_time=page_processing_time,
-                    ocr_processing_time=0.0,
+                    image_processing_time=0.0,
                     llm_processing_time=0.0,
                     success=False,
                     error_message=str(e),

@@ -478,7 +478,7 @@ curl -X GET "http://localhost:8000/v1/ocr/pdf-llm-tasks/{task_id}"
   ],
   "total_processing_time": 12.45,
   "pdf_processing_time": 3.21,
-  "ocr_processing_time": 9.24,
+  "image_processing_time": 9.24,
   "dpi_used": 300
 }
 ```

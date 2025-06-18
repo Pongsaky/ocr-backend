@@ -120,41 +120,25 @@ class ExternalOCRService:
             
             # Call external image processing API
             processed_image_base64 = await self._call_external_api(external_request)
-            # Use LLM OCR service directly for text extraction
-            from app.services.ocr_llm_service import ocr_llm_service
-            from app.models.ocr_models import OCRLLMRequest
-            
-            # Convert to LLM OCR request
-            llm_request = OCRLLMRequest(
-                threshold=ocr_request.threshold,
-                contrast_level=ocr_request.contrast_level,
-                prompt=settings.OCR_LLM_DEFAULT_PROMPT,
-                model=settings.OCR_LLM_MODEL
-            )
-            
-            # Extract text using LLM OCR service
-            llm_result = await ocr_llm_service.process_image_with_llm(
-                processed_image_base64, "", llm_request, 0.0
-            )
             
             processing_time = time.time() - start_time
             
             logger.info(
-                f"LLM OCR text extraction completed in {processing_time:.2f}s"
+                f"External image processing completed in {processing_time:.2f}s"
             )
             
             return ImageProcessingResult(
-                success=llm_result.success,
+                success=True,
                 processed_image_base64=processed_image_base64,
                 processing_time=processing_time,
                 threshold_used=ocr_request.threshold,
                 contrast_level_used=ocr_request.contrast_level,
-                extracted_text=llm_result.extracted_text
+                extracted_text=""  # No text extraction in external service
             )
             
         except Exception as e:
             processing_time = time.time() - start_time
-            logger.error(f"LLM OCR processing failed: {str(e)}")
+            logger.error(f"External image processing failed: {str(e)}")
             
             return ImageProcessingResult(
                 success=False,

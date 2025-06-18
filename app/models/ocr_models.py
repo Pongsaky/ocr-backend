@@ -238,7 +238,7 @@ class OCRLLMResult(BaseModel):
     extracted_text: str = Field(description="LLM-enhanced extracted text")
     original_ocr_text: str = Field(description="Original OCR extracted text")
     processing_time: float = Field(description="Total processing time in seconds")
-    ocr_processing_time: float = Field(description="OCR processing time in seconds")
+    image_processing_time: float = Field(description="Image processing time in seconds")
     llm_processing_time: float = Field(description="LLM processing time in seconds")
     threshold_used: int = Field(description="Threshold value used")
     contrast_level_used: float = Field(description="Contrast level used")
@@ -253,7 +253,7 @@ class OCRLLMResult(BaseModel):
                 "extracted_text": "Enhanced and corrected text from LLM",
                 "original_ocr_text": "Original OCR extracted text",
                 "processing_time": 3.45,
-                "ocr_processing_time": 1.23,
+                "image_processing_time": 1.23,
                 "llm_processing_time": 2.22,
                 "threshold_used": 500,
                 "contrast_level_used": 1.3,
@@ -300,7 +300,7 @@ class OCRLLMResponse(BaseModel):
                     "extracted_text": "Enhanced and corrected text from LLM",
                     "original_ocr_text": "Original OCR extracted text",
                     "processing_time": 3.45,
-                    "ocr_processing_time": 1.23,
+                    "image_processing_time": 1.23,
                     "llm_processing_time": 2.22,
                     "threshold_used": 500,
                     "contrast_level_used": 1.3,
@@ -384,7 +384,7 @@ class PDFOCRResult(BaseModel):
     results: List[PDFPageResult] = Field(description="Results for each page")
     total_processing_time: float = Field(description="Total processing time in seconds")
     pdf_processing_time: float = Field(description="Time spent converting PDF to images")
-    ocr_processing_time: float = Field(description="Time spent on OCR processing")
+    image_processing_time: float = Field(description="Time spent on OCR processing")
     dpi_used: int = Field(description="DPI used for PDF to image conversion")
     
     class Config:
@@ -407,7 +407,7 @@ class PDFOCRResult(BaseModel):
                 ],
                 "total_processing_time": 5.67,
                 "pdf_processing_time": 1.23,
-                "ocr_processing_time": 4.44,
+                "image_processing_time": 4.44,
                 "dpi_used": 300
             }
         }
@@ -452,7 +452,7 @@ class PDFOCRResponse(BaseModel):
                     "results": [],
                     "total_processing_time": 5.67,
                     "pdf_processing_time": 1.23,
-                    "ocr_processing_time": 4.44,
+                    "image_processing_time": 4.44,
                     "dpi_used": 300
                 },
                 "error_message": None,
@@ -512,7 +512,7 @@ class PDFPageLLMResult(BaseModel):
     extracted_text: str = Field(description="LLM-enhanced extracted text from the page")
     original_ocr_text: str = Field(description="Original OCR text from the page")
     processing_time: float = Field(description="Total processing time for this page")
-    ocr_processing_time: float = Field(description="OCR processing time for this page")
+    image_processing_time: float = Field(description="OCR processing time for this page")
     llm_processing_time: float = Field(description="LLM processing time for this page")
     success: bool = Field(description="Whether page processing was successful")
     error_message: Optional[str] = Field(
@@ -532,7 +532,7 @@ class PDFPageLLMResult(BaseModel):
                 "extracted_text": "Enhanced text from page 1",
                 "original_ocr_text": "Original OCR text from page 1",
                 "processing_time": 3.45,
-                "ocr_processing_time": 1.23,
+                "image_processing_time": 1.23,
                 "llm_processing_time": 2.22,
                 "success": True,
                 "error_message": None,
@@ -552,7 +552,7 @@ class PDFLLMOCRResult(BaseModel):
     results: List[PDFPageLLMResult] = Field(description="LLM-enhanced results for each page")
     total_processing_time: float = Field(description="Total processing time in seconds")
     pdf_processing_time: float = Field(description="Time spent converting PDF to images")
-    ocr_processing_time: float = Field(description="Time spent on OCR processing")
+    image_processing_time: float = Field(description="Time spent on image processing")
     llm_processing_time: float = Field(description="Time spent on LLM processing")
     dpi_used: int = Field(description="DPI used for PDF to image conversion")
     model_used: str = Field(description="LLM model used")
@@ -568,7 +568,7 @@ class PDFLLMOCRResult(BaseModel):
                 "results": [],
                 "total_processing_time": 8.90,
                 "pdf_processing_time": 1.23,
-                "ocr_processing_time": 3.67,
+                "image_processing_time": 3.67,
                 "llm_processing_time": 4.00,
                 "dpi_used": 300,
                 "model_used": "nectec/Pathumma-vision-ocr-lora-dev",
@@ -616,7 +616,7 @@ class PDFLLMOCRResponse(BaseModel):
                     "results": [],
                     "total_processing_time": 8.90,
                     "pdf_processing_time": 1.23,
-                    "ocr_processing_time": 3.67,
+                    "image_processing_time": 3.67,
                     "llm_processing_time": 4.00,
                     "dpi_used": 300,
                     "model_used": "nectec/Pathumma-vision-ocr-lora-dev",
@@ -728,7 +728,7 @@ class PDFPageLLMStreamResult(BaseModel):
     extracted_text: str = Field(description="LLM-enhanced extracted text from the page")
     original_ocr_text: str = Field(description="Original OCR text from the page")
     processing_time: float = Field(description="Total processing time for this page")
-    ocr_processing_time: float = Field(description="OCR processing time for this page")
+    image_processing_time: float = Field(description="OCR processing time for this page")
     llm_processing_time: float = Field(description="LLM processing time for this page")
     success: bool = Field(description="Whether page processing was successful")
     error_message: Optional[str] = Field(
@@ -749,7 +749,7 @@ class PDFPageLLMStreamResult(BaseModel):
                 "extracted_text": "LLM-enhanced text from page 1",
                 "original_ocr_text": "Original OCR text from page 1",
                 "processing_time": 4.2,
-                "ocr_processing_time": 2.1,
+                "image_processing_time": 2.1,
                 "llm_processing_time": 2.1,
                 "success": True,
                 "error_message": None,

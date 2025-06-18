@@ -96,14 +96,14 @@ class TestLLMIntegration:
     async def test_real_llm_api_with_simple_image(self, llm_service, test_image_base64, sample_ocr_llm_request):
         """Test real LLM API call with a simple image."""
         original_ocr_text = "Sample OCR text"
-        ocr_processing_time = 1.0
+        image_processing_time = 1.0
         
         try:
             result = await llm_service.process_image_with_llm(
                 test_image_base64,
                 original_ocr_text, 
                 sample_ocr_llm_request,
-                ocr_processing_time
+                image_processing_time
             )
             
             # Verify result structure
@@ -114,13 +114,13 @@ class TestLLMIntegration:
             assert isinstance(result.llm_processing_time, float)
             
             # Verify timing
-            assert result.processing_time > ocr_processing_time
+            assert result.processing_time > image_processing_time
             # Note: llm_processing_time might be 0 if the request failed quickly
             assert result.llm_processing_time >= 0
             
             # Verify original data is preserved
             assert result.original_ocr_text == original_ocr_text
-            assert result.ocr_processing_time == ocr_processing_time
+            assert result.image_processing_time == image_processing_time
             assert result.threshold_used == sample_ocr_llm_request.threshold
             assert result.contrast_level_used == sample_ocr_llm_request.contrast_level
             assert result.model_used == sample_ocr_llm_request.model
@@ -408,7 +408,7 @@ class TestLLMIntegration:
         
         # Simulated OCR result
         original_ocr_text = "Sample text extracted by OCR service"
-        ocr_processing_time = 2.5
+        image_processing_time = 2.5
         
         # LLM enhancement request  
         llm_request = OCRLLMRequest(
@@ -424,14 +424,14 @@ class TestLLMIntegration:
                 sample_text_image_base64,
                 original_ocr_text,
                 llm_request,
-                ocr_processing_time
+                image_processing_time
             )
             
             # Verify complete workflow result
             assert isinstance(final_result, OCRLLMResult)
             assert final_result.original_ocr_text == original_ocr_text
-            assert final_result.ocr_processing_time == ocr_processing_time
-            assert final_result.processing_time > ocr_processing_time
+            assert final_result.image_processing_time == image_processing_time
+            assert final_result.processing_time > image_processing_time
             
             if final_result.success:
                 print(f"✅ End-to-end workflow completed successfully")

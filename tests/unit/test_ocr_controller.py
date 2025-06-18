@@ -121,7 +121,7 @@ class TestOCRController:
                 threshold_used=128,
                 contrast_level_used=1.0,
                 original_ocr_text="",
-                ocr_processing_time=1.0,
+                image_processing_time=1.0,
                 llm_processing_time=1.0,
                 model_used="gpt-4",
                 prompt_used="Extract text"

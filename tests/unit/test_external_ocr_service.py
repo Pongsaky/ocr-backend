@@ -36,7 +36,7 @@ class TestExternalOCRService:
                 threshold_used=sample_ocr_request.threshold,
                 contrast_level_used=sample_ocr_request.contrast_level,
                 original_ocr_text="",
-                ocr_processing_time=0.5,
+                image_processing_time=0.5,
                 llm_processing_time=0.5,
                 model_used="gpt-4",
                 prompt_used="Extract text"
@@ -45,14 +45,14 @@ class TestExternalOCRService:
             result = await ocr_service.process_image(sample_image_path, sample_ocr_request)
             
             assert result.success is True
-            assert result.extracted_text == "Extracted text from image"
+            assert result.extracted_text == ""  # External service no longer extracts text
             assert result.threshold_used == sample_ocr_request.threshold
             assert result.contrast_level_used == sample_ocr_request.contrast_level
             assert result.processing_time > 0
             
-            # Verify API was called
+            # Verify API was called (but not LLM service anymore)
             mock_api.assert_called_once()
-            mock_llm.assert_called_once()
+            mock_llm.assert_not_called()  # LLM is no longer called in external service
     
     @pytest.mark.asyncio
     async def test_process_image_failure(self, ocr_service, sample_image_path, sample_ocr_request):

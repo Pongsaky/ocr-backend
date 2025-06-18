@@ -39,7 +39,7 @@ class OCRLLMService:
         processed_image_base64: str,
         original_ocr_text: str,
         ocr_request: OCRLLMRequest,
-        ocr_processing_time: float
+        image_processing_time: float
     ) -> OCRLLMResult:
         """
         Process an image with LLM for enhanced text extraction.
@@ -48,7 +48,7 @@ class OCRLLMService:
             processed_image_base64: Base64 encoded processed image
             original_ocr_text: Original OCR extracted text
             ocr_request: OCR LLM processing parameters
-            ocr_processing_time: Time taken for initial OCR processing
+            image_processing_time: Time taken for initial OCR processing
             
         Returns:
             OCRLLMResult: Enhanced OCR processing result
@@ -81,7 +81,7 @@ class OCRLLMService:
             enhanced_text = await self._call_llm_api(chat_request)
             llm_processing_time = time.time() - llm_start_time
             
-            total_processing_time = time.time() - start_time + ocr_processing_time
+            total_processing_time = time.time() - start_time + image_processing_time
             
             logger.info(
                 f"LLM-enhanced OCR processing completed in {llm_processing_time:.2f}s "
@@ -93,7 +93,7 @@ class OCRLLMService:
                 extracted_text=enhanced_text.strip(),
                 original_ocr_text=original_ocr_text.strip(),
                 processing_time=total_processing_time,
-                ocr_processing_time=ocr_processing_time,
+                image_processing_time=image_processing_time,
                 llm_processing_time=llm_processing_time,
                 threshold_used=ocr_request.threshold,
                 contrast_level_used=ocr_request.contrast_level,
@@ -102,7 +102,7 @@ class OCRLLMService:
             )
             
         except Exception as e:
-            total_processing_time = time.time() - start_time + ocr_processing_time
+            total_processing_time = time.time() - start_time + image_processing_time
             logger.error(f"LLM-enhanced OCR processing failed: {str(e)}")
             
             return OCRLLMResult(
@@ -110,7 +110,7 @@ class OCRLLMService:
                 extracted_text="",
                 original_ocr_text=original_ocr_text,
                 processing_time=total_processing_time,
-                ocr_processing_time=ocr_processing_time,
+                image_processing_time=image_processing_time,
                 llm_processing_time=0.0,
                 threshold_used=ocr_request.threshold,
                 contrast_level_used=ocr_request.contrast_level,

@@ -93,7 +93,7 @@ class TestPDFStreamingModels:
             extracted_text="Enhanced text",
             original_ocr_text="Original text",
             processing_time=4.2,
-            ocr_processing_time=2.1,
+            image_processing_time=2.1,
             llm_processing_time=2.1,
             success=True,
             threshold_used=500,

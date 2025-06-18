@@ -76,7 +76,7 @@ class TestOCRLLMService:
     async def test_process_image_with_llm_success(self, llm_service, sample_base64_image, sample_ocr_llm_request):
         """Test successful LLM-enhanced OCR processing."""
         original_ocr_text = "Original OCR text"
-        ocr_processing_time = 1.5
+        image_processing_time = 1.5
         
         with patch.object(llm_service, '_call_llm_api', new_callable=AsyncMock) as mock_api:
             mock_api.return_value = "Enhanced extracted text from image"
@@ -85,7 +85,7 @@ class TestOCRLLMService:
                 sample_base64_image, 
                 original_ocr_text, 
                 sample_ocr_llm_request, 
-                ocr_processing_time
+                image_processing_time
             )
             
             assert result.success is True
@@ -95,8 +95,8 @@ class TestOCRLLMService:
             assert result.contrast_level_used == sample_ocr_llm_request.contrast_level
             assert result.model_used == sample_ocr_llm_request.model
             assert result.prompt_used == sample_ocr_llm_request.prompt
-            assert result.processing_time > ocr_processing_time
-            assert result.ocr_processing_time == ocr_processing_time
+            assert result.processing_time > image_processing_time
+            assert result.image_processing_time == image_processing_time
             assert result.llm_processing_time > 0
             
             # Show unit test results (mocked response)
@@ -113,7 +113,7 @@ class TestOCRLLMService:
     async def test_process_image_with_llm_failure(self, llm_service, sample_base64_image, sample_ocr_llm_request):
         """Test LLM-enhanced OCR processing failure."""
         original_ocr_text = "Original OCR text"
-        ocr_processing_time = 1.5
+        image_processing_time = 1.5
         
         with patch.object(llm_service, '_call_llm_api', new_callable=AsyncMock) as mock_api:
             mock_api.side_effect = Exception("LLM API Error")
@@ -122,13 +122,13 @@ class TestOCRLLMService:
                 sample_base64_image, 
                 original_ocr_text, 
                 sample_ocr_llm_request, 
-                ocr_processing_time
+                image_processing_time
             )
             
             assert result.success is False
             assert result.extracted_text == ""
             assert result.original_ocr_text == "Original OCR text"
-            assert result.processing_time > ocr_processing_time
+            assert result.processing_time > image_processing_time
             assert result.llm_processing_time == 0.0
 
     def test_prepare_multimodal_content(self, llm_service, sample_base64_image):
