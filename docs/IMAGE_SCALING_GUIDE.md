@@ -2,12 +2,12 @@
 
 ## Overview
 
-The OCR Backend API now includes automatic image validation and scaling functionality to ensure images stay within the LLM context length limits (8192 tokens). Images that exceed 6,000,000 pixels (width × height) are automatically scaled down while maintaining their aspect ratio and quality.
+The OCR Backend API now includes automatic image validation and scaling functionality to ensure images stay within the LLM context length limits (8192 tokens). Images that exceed 4,000,000 pixels (width × height) are automatically scaled down while maintaining their aspect ratio and quality.
 
 ## Key Features
 
 ### 🎯 **Automatic Scaling**
-- Images exceeding 6M pixels are automatically scaled down
+- Images exceeding 4M pixels are automatically scaled down
 - Maintains original aspect ratio
 - High-quality scaling using LANCZOS resampling
 - Optimized for LLM processing efficiency
@@ -29,7 +29,7 @@ The OCR Backend API now includes automatic image validation and scaling function
 
 ```bash
 # Image scaling settings
-MAX_IMAGE_PIXELS=6000000          # Maximum allowed pixels (6M default)
+MAX_IMAGE_PIXELS=4000000          # Maximum allowed pixels (4M default)
 IMAGE_SCALING_QUALITY=95          # JPEG quality for scaled images (95 default)
 IMAGE_SCALING_RESAMPLE=LANCZOS    # Resampling algorithm (LANCZOS default)
 ENABLE_IMAGE_SCALING=True         # Enable/disable scaling (True default)
@@ -111,17 +111,17 @@ When scaling is applied, additional metadata is included in logs:
 ### Example 1: Large Image Scaling
 
 **Input Image**: 3000×4000 pixels (12M pixels)
-- Exceeds 6M pixel limit
-- **Scale factor**: 0.707
-- **Output**: 2121×2828 pixels (≈6M pixels)
+- Exceeds 4M pixel limit
+- **Scale factor**: 0.577
+- **Output**: 1732×2309 pixels (≈4M pixels)
 - **Quality**: Maintains visual quality with LANCZOS resampling
 
 ### Example 2: PDF Page Processing
 
 **PDF Page**: 2481×3508 pixels (8.7M pixels)
 - Automatically scaled during PDF conversion
-- **Scale factor**: 0.830
-- **Output**: 2059×2912 pixels (≈6M pixels)
+- **Scale factor**: 0.678
+- **Output**: 1682×2378 pixels (≈4M pixels)
 - **Result**: Improved LLM processing speed and accuracy
 
 ## Benefits
@@ -137,7 +137,7 @@ When scaling is applied, additional metadata is included in logs:
 - **Consistent Results**: Standardized input sizes for LLM
 
 ### 🔒 **Context Limit Compliance**
-- **Token Efficiency**: Ensures images fit within 8192 token limit
+- **Token Efficiency**: Ensures images fit within 8192 token limit (4M pixel max)
 - **Predictable Processing**: Consistent performance across different image sizes
 - **Error Prevention**: Avoids context length exceeded errors
 
@@ -146,9 +146,9 @@ When scaling is applied, additional metadata is included in logs:
 ### Log Messages
 
 ```
-INFO: Page 1 scaled: 8,703,348 -> 5,995,808 pixels (factor: 0.830)
-DEBUG: Image validation: image.png has 2,000,000 pixels (max: 6,000,000) - VALID
-INFO: Image scaled for processing: 10,000,000 -> 6,000,000 pixels (factor: 0.775)
+INFO: Page 1 scaled: 8,703,348 -> 3,997,904 pixels (factor: 0.678)
+DEBUG: Image validation: image.png has 2,000,000 pixels (max: 4,000,000) - VALID
+INFO: Image scaled for processing: 10,000,000 -> 4,000,000 pixels (factor: 0.632)
 ```
 
 ### Performance Metrics
@@ -182,8 +182,8 @@ ERROR: Failed to scale image: Out of memory
 
 ### Best Practices
 
-1. **Monitor Scaling Frequency**: Check how often images need scaling
-2. **Adjust Threshold**: Fine-tune `MAX_IMAGE_PIXELS` based on your use case
+1. **Monitor Scaling Frequency**: Check how often images need scaling  
+2. **Adjust Threshold**: Fine-tune `MAX_IMAGE_PIXELS` (current: 4M) based on your use case
 3. **Quality vs Speed**: Choose appropriate resampling method
 4. **Log Analysis**: Review scaling logs for optimization opportunities
 

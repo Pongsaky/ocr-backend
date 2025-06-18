@@ -7,7 +7,7 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
 - **External OCR Integration**: Uses Vision World API for text extraction
 - **LLM-Enhanced OCR**: Integration with Pathumma Vision OCR LLM for improved text extraction
 - **PDF OCR Processing**: Multi-page PDF processing with batch optimization and memory management
-- **Automatic Image Scaling**: Intelligent image resizing to ensure LLM context limit compliance (6M pixels max)
+- **Automatic Image Scaling**: Intelligent image resizing to ensure LLM context limit compliance (4M pixels max)
 - **Dual Processing Modes**: Synchronous and asynchronous OCR processing for both images and PDFs
 - **Task Management**: Track processing status with unique task IDs for all processing types
 - **Multi-Format Support**: 
@@ -107,7 +107,7 @@ IMAGE_MAX_SIZE=10485760
 ALLOWED_IMAGE_EXTENSIONS=["jpg","jpeg","png","bmp","tiff","webp"]
 
 # Image Scaling Settings
-MAX_IMAGE_PIXELS=6000000          # Maximum allowed pixels for LLM context (6M default)
+MAX_IMAGE_PIXELS=4000000          # Maximum allowed pixels for LLM context (4M default)
 IMAGE_SCALING_QUALITY=95          # JPEG quality for scaled images (95 default)
 IMAGE_SCALING_RESAMPLE=LANCZOS    # Resampling algorithm (LANCZOS default)
 ENABLE_IMAGE_SCALING=True         # Enable/disable scaling (True default)
