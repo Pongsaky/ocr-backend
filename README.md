@@ -7,6 +7,7 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
 - **External OCR Integration**: Uses Vision World API for text extraction
 - **LLM-Enhanced OCR**: Integration with Pathumma Vision OCR LLM for improved text extraction
 - **PDF OCR Processing**: Multi-page PDF processing with batch optimization and memory management
+- **Automatic Image Scaling**: Intelligent image resizing to ensure LLM context limit compliance (6M pixels max)
 - **Dual Processing Modes**: Synchronous and asynchronous OCR processing for both images and PDFs
 - **Task Management**: Track processing status with unique task IDs for all processing types
 - **Multi-Format Support**: 
@@ -17,6 +18,11 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
   - Memory-efficient batch processing
   - Resource cleanup and error recovery
   - Configurable DPI (150-600) for optimal quality/performance balance
+- **Smart Image Processing**:
+  - Automatic validation and scaling for LLM context limits
+  - High-quality LANCZOS resampling
+  - Maintains aspect ratio and visual quality
+  - Configurable scaling thresholds and quality settings
 - **Rate Limiting**: Configurable request rate limiting
 - **Error Handling**: Comprehensive error handling and logging
 - **Health Monitoring**: Service health checks and external API monitoring
@@ -100,6 +106,12 @@ DEFAULT_CONTRAST_LEVEL=1.0
 IMAGE_MAX_SIZE=10485760
 ALLOWED_IMAGE_EXTENSIONS=["jpg","jpeg","png","bmp","tiff","webp"]
 
+# Image Scaling Settings
+MAX_IMAGE_PIXELS=6000000          # Maximum allowed pixels for LLM context (6M default)
+IMAGE_SCALING_QUALITY=95          # JPEG quality for scaled images (95 default)
+IMAGE_SCALING_RESAMPLE=LANCZOS    # Resampling algorithm (LANCZOS default)
+ENABLE_IMAGE_SCALING=True         # Enable/disable scaling (True default)
+
 # PDF Processing Settings
 MAX_PDF_SIZE=52428800  # 50MB
 MAX_PDF_PAGES=10
@@ -146,6 +158,7 @@ The API will be available at:
 ## 📖 Documentation
 
 - **[PDF OCR Processing Guide](docs/PDF_OCR_GUIDE.md)** - Comprehensive guide for PDF OCR features
+- **[Image Scaling Guide](docs/IMAGE_SCALING_GUIDE.md)** - Automatic image scaling for LLM context limits
 - **[External OCR Integration](docs/EXTERNAL_OCR_INTEGRATION.md)** - External service integration details
 - **[Testing Guide](docs/TESTING.md)** - Complete testing documentation
 

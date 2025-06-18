@@ -49,7 +49,7 @@ class OCRController:
         ocr_request: OCRRequest
     ) -> OCRResponse:
         """
-        Process uploaded image for OCR.
+        Process uploaded image for OCR using external preprocessing + LLM text extraction.
         
         Args:
             file: Uploaded image file
@@ -137,7 +137,7 @@ class OCRController:
         ocr_request: OCRRequest
     ) -> OCRResult:
         """
-        Process uploaded image synchronously.
+        Process uploaded image synchronously using external preprocessing + LLM text extraction.
         
         Args:
             file: Uploaded image file
@@ -160,13 +160,43 @@ class OCRController:
             # Save uploaded file
             image_path = await self._save_uploaded_file(file, task_id)
             
-            # Process image
-            result = await external_ocr_service.process_image(image_path, ocr_request)
+            # Step 1: Process image with external service (preprocessing)
+            logger.debug("Step 1: Processing image with external preprocessing service")
+            processed_result = await external_ocr_service.process_image(image_path, ocr_request)
+            
+            if not processed_result.success:
+                raise Exception(f"Image preprocessing failed: {processed_result.error_message}")
+            
+            # Step 2: Extract text using LLM service
+            logger.debug("Step 2: Extracting text with LLM service")
+            
+            # Convert to OCRLLMRequest for LLM processing
+            ocr_llm_request = OCRLLMRequest(
+                threshold=ocr_request.threshold,
+                contrast_level=ocr_request.contrast_level,
+                prompt=None,  # Use default prompt
+                model=None    # Use default model
+            )
+            
+            # Use LLM service to extract text from processed image
+            llm_result = await ocr_llm_service.process_image_with_llm(
+                processed_image_base64=processed_result.processed_image_base64,
+                original_ocr_text="",  # No original text from preprocessing
+                ocr_request=ocr_llm_request,
+                ocr_processing_time=processed_result.processing_time
+            )
             
             # Cleanup temporary file
             await self._cleanup_file(image_path)
             
-            return result
+            # Convert LLM result to OCR result format
+            return OCRResult(
+                success=llm_result.success,
+                extracted_text=llm_result.extracted_text,
+                processing_time=llm_result.processing_time,
+                threshold_used=llm_result.threshold_used,
+                contrast_level_used=llm_result.contrast_level_used
+            )
             
         except Exception as e:
             logger.error(f"Synchronous OCR processing failed: {str(e)}")
@@ -200,8 +230,35 @@ class OCRController:
         try:
             logger.info(f"Processing OCR task {task_id} asynchronously")
             
-            # Process image
-            result = await external_ocr_service.process_image(image_path, ocr_request)
+            # Step 1: Process image with external service (preprocessing)
+            processed_result = await external_ocr_service.process_image(image_path, ocr_request)
+            
+            if not processed_result.success:
+                raise Exception(f"Image preprocessing failed: {processed_result.error_message}")
+            
+            # Step 2: Extract text using LLM service
+            ocr_llm_request = OCRLLMRequest(
+                threshold=ocr_request.threshold,
+                contrast_level=ocr_request.contrast_level,
+                prompt=None,  # Use default prompt
+                model=None    # Use default model
+            )
+            
+            llm_result = await ocr_llm_service.process_image_with_llm(
+                processed_image_base64=processed_result.processed_image_base64,
+                original_ocr_text="",  # No original text from preprocessing
+                ocr_request=ocr_llm_request,
+                ocr_processing_time=processed_result.processing_time
+            )
+            
+            # Convert LLM result to OCR result format
+            result = OCRResult(
+                success=llm_result.success,
+                extracted_text=llm_result.extracted_text,
+                processing_time=llm_result.processing_time,
+                threshold_used=llm_result.threshold_used,
+                contrast_level_used=llm_result.contrast_level_used
+            )
             
             # Update task with result
             completed_at = datetime.utcnow()
@@ -242,7 +299,7 @@ class OCRController:
         ocr_llm_request: OCRLLMRequest
     ) -> OCRLLMResponse:
         """
-        Process uploaded image for LLM-enhanced OCR.
+        Process uploaded image for LLM-enhanced OCR with custom prompts/models.
         
         Args:
             file: Uploaded image file
@@ -277,9 +334,7 @@ class OCRController:
                 completed_at=None
             )
             
-            # Store task (we'll need a new dictionary for LLM tasks)
-            if not hasattr(self, 'llm_tasks'):
-                self.llm_tasks: Dict[str, OCRLLMResponse] = {}
+            # Store task
             self.llm_tasks[task_id] = task_response
             
             # Start processing asynchronously
@@ -301,8 +356,6 @@ class OCRController:
                 completed_at=datetime.utcnow()
             )
             
-            if not hasattr(self, 'llm_tasks'):
-                self.llm_tasks: Dict[str, OCRLLMResponse] = {}
             self.llm_tasks[task_id] = error_response
             return error_response
     
@@ -319,7 +372,7 @@ class OCRController:
         Raises:
             HTTPException: If task not found
         """
-        if not hasattr(self, 'llm_tasks') or task_id not in self.llm_tasks:
+        if task_id not in self.llm_tasks:
             logger.warning(f"LLM task {task_id} not found")
             raise HTTPException(
                 status_code=404,
@@ -334,7 +387,7 @@ class OCRController:
         ocr_llm_request: OCRLLMRequest
     ) -> OCRLLMResult:
         """
-        Process uploaded image with LLM synchronously.
+        Process uploaded image with LLM synchronously with custom prompts/models.
         
         Args:
             file: Uploaded image file
@@ -357,23 +410,23 @@ class OCRController:
             # Save uploaded file
             image_path = await self._save_uploaded_file(file, task_id)
             
-            # Convert OCRLLMRequest to OCRRequest for initial processing
+            # Step 1: Process image with external service (preprocessing)
             ocr_request = OCRRequest(
                 threshold=ocr_llm_request.threshold,
                 contrast_level=ocr_llm_request.contrast_level
             )
             
-            # First, get processed image from external OCR
-            logger.info("Step 1: Processing image with external OCR service")
-            processed_result = await self._get_processed_image_and_text(image_path, ocr_request)
+            processed_result = await external_ocr_service.process_image(image_path, ocr_request)
             
-            # Then, enhance with LLM
-            logger.info("Step 2: Enhancing with LLM")
+            if not processed_result.success:
+                raise Exception(f"Image preprocessing failed: {processed_result.error_message}")
+            
+            # Step 2: Extract text using LLM service
             result = await ocr_llm_service.process_image_with_llm(
-                processed_image_base64=processed_result["image"],
-                original_ocr_text=processed_result["text"],
+                processed_image_base64=processed_result.processed_image_base64,
+                original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
-                ocr_processing_time=processed_result["processing_time"]
+                ocr_processing_time=processed_result.processing_time
             )
             
             # Cleanup temporary file
@@ -413,21 +466,23 @@ class OCRController:
         try:
             logger.info(f"Processing LLM OCR task {task_id} asynchronously")
             
-            # Convert OCRLLMRequest to OCRRequest for initial processing
+            # Step 1: Process image with external service (preprocessing)
             ocr_request = OCRRequest(
                 threshold=ocr_llm_request.threshold,
                 contrast_level=ocr_llm_request.contrast_level
             )
             
-            # First, get processed image from external OCR
-            processed_result = await self._get_processed_image_and_text(image_path, ocr_request)
+            processed_result = await external_ocr_service.process_image(image_path, ocr_request)
             
-            # Then, enhance with LLM
+            if not processed_result.success:
+                raise Exception(f"Image preprocessing failed: {processed_result.error_message}")
+            
+            # Step 2: Extract text using LLM service
             result = await ocr_llm_service.process_image_with_llm(
-                processed_image_base64=processed_result["image"],
-                original_ocr_text=processed_result["text"],
+                processed_image_base64=processed_result.processed_image_base64,
+                original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
-                ocr_processing_time=processed_result["processing_time"]
+                ocr_processing_time=processed_result.processing_time
             )
             
             # Update task with result
@@ -460,55 +515,6 @@ class OCRController:
         finally:
             # Cleanup temporary file
             await self._cleanup_file(image_path)
-    
-    async def _get_processed_image_and_text(self, image_path: Path, ocr_request: OCRRequest) -> dict:
-        """
-        Get processed image and text from external OCR service.
-        
-        Args:
-            image_path: Path to image file
-            ocr_request: OCR processing parameters
-            
-        Returns:
-            dict: Contains processed image base64, extracted text, and processing time
-        """
-        import httpx
-        import base64
-        
-        # Convert image to base64
-        with open(image_path, "rb") as image_file:
-            image_bytes = image_file.read()
-            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-        
-        # Call external OCR API directly to get both processed image and text
-        url = f"{self.settings.EXTERNAL_OCR_BASE_URL}{self.settings.EXTERNAL_OCR_ENDPOINT}"
-        
-        start_time = time.time()
-        
-        async with httpx.AsyncClient(timeout=self.settings.EXTERNAL_OCR_TIMEOUT) as client:
-            response = await client.post(
-                url,
-                headers={
-                    "Content-Type": "application/json",
-                    "accept": "application/json"
-                },
-                json={
-                    "image": image_base64,
-                    "threshold": ocr_request.threshold,
-                    "contrast_level": ocr_request.contrast_level
-                }
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            processing_time = time.time() - start_time
-            
-            return {
-                "image": data.get("image", image_base64),  # Processed image
-                "text": data.get("text_response", ""),      # Extracted text
-                "processing_time": processing_time
-            }
     
     async def _validate_upload_file(self, file: UploadFile) -> None:
         """

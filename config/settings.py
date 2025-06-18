@@ -64,6 +64,12 @@ class Settings(BaseSettings):
         )
     )
     
+    # --- Image Processing & Scaling Settings ---
+    MAX_IMAGE_PIXELS: int = int(os.getenv("MAX_IMAGE_PIXELS", "6000000"))  # 6M pixels for LLM context limit
+    IMAGE_SCALING_QUALITY: int = int(os.getenv("IMAGE_SCALING_QUALITY", "95"))  # JPEG quality for scaled images
+    IMAGE_SCALING_RESAMPLE: str = os.getenv("IMAGE_SCALING_RESAMPLE", "LANCZOS")  # Resampling algorithm
+    ENABLE_IMAGE_SCALING: bool = os.getenv("ENABLE_IMAGE_SCALING", "True").lower() in ("true", "1", "t")
+    
     # --- PDF Processing Settings ---
     MAX_PDF_PAGES: int = int(os.getenv("MAX_PDF_PAGES", "10"))
     MAX_PDF_SIZE: int = int(os.getenv("MAX_PDF_SIZE", "52428800"))  # 50MB

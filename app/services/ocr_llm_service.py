@@ -162,6 +162,7 @@ class OCRLLMService:
             
             # Serialize request excluding None fields
             request_dict = request.model_dump(exclude_none=True)
+            # logger.debug(f"LLM API request: {request_dict}")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(

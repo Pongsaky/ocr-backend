@@ -27,7 +27,7 @@ class OCRRequest(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "threshold": 500,
                 "contrast_level": 1.3
@@ -52,7 +52,7 @@ class OCRResult(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "extracted_text": "Sample extracted text from image",
@@ -83,7 +83,7 @@ class OCRResponse(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "task_id": "12345678-1234-1234-1234-123456789012",
                 "status": "completed",
@@ -114,7 +114,7 @@ class ErrorResponse(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "error": True,
                 "message": "File format not supported",
@@ -137,7 +137,7 @@ class HealthCheckResponse(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "healthy",
                 "environment": "development",
@@ -193,7 +193,7 @@ class OCRLLMRequest(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "threshold": 500,
                 "contrast_level": 1.3,
@@ -239,7 +239,7 @@ class OCRLLMResult(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "extracted_text": "Enhanced and corrected text from LLM",
@@ -275,7 +275,7 @@ class OCRLLMResponse(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "task_id": "12345678-1234-1234-1234-123456789012",
                 "status": "completed",
@@ -323,7 +323,7 @@ class PDFOCRRequest(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "threshold": 500,
                 "contrast_level": 1.3,
@@ -347,7 +347,7 @@ class PDFPageResult(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "page_number": 1,
                 "extracted_text": "Sample text from page 1",
@@ -373,7 +373,7 @@ class PDFOCRResult(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "total_pages": 3,
@@ -417,7 +417,7 @@ class PDFOCRResponse(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "task_id": "12345678-1234-1234-1234-123456789012",
                 "status": "completed",
@@ -471,7 +471,7 @@ class PDFLLMOCRRequest(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "threshold": 500,
                 "contrast_level": 1.3,
@@ -502,7 +502,7 @@ class PDFPageLLMResult(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "page_number": 1,
                 "extracted_text": "Enhanced text from page 1",
@@ -536,7 +536,7 @@ class PDFLLMOCRResult(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "total_pages": 3,
@@ -573,7 +573,7 @@ class PDFLLMOCRResponse(BaseModel):
     
     class Config:
         """Pydantic model configuration."""
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "task_id": "12345678-1234-1234-1234-123456789012",
                 "status": "completed",
