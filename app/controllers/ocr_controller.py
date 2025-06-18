@@ -18,7 +18,8 @@ from app.models.ocr_models import (
     OCRRequest, OCRResponse, OCRResult,
     OCRLLMRequest, OCRLLMResponse, OCRLLMResult,
     PDFOCRRequest, PDFOCRResponse, PDFOCRResult,
-    PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult
+    PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult,
+    CancelTaskRequest, CancelTaskResponse, TaskCancellationError, TaskStatus
 )
 from app.services.external_ocr_service import external_ocr_service
 from app.services.ocr_llm_service import ocr_llm_service
@@ -41,10 +42,13 @@ class OCRController:
         self.pdf_llm_tasks: Dict[str, PDFLLMOCRResponse] = {}
         # New streaming queues for real-time updates
         self.streaming_queues: Dict[str, asyncio.Queue] = {}
+        # Task cancellation tracking
+        self.cancelled_tasks: set = set()
+        self.cancellation_reasons: Dict[str, str] = {}
         self.executor = ThreadPoolExecutor(
             max_workers=settings.MAX_CONCURRENT_TASKS
         )
-        logger.info("OCR Controller initialized with streaming support")
+        logger.info("OCR Controller initialized with streaming support and task cancellation")
     
     async def process_image(
         self, 
@@ -232,6 +236,11 @@ class OCRController:
         """
         try:
             logger.info(f"Processing OCR task {task_id} asynchronously")
+            
+            # Check for cancellation before starting
+            if self.is_task_cancelled(task_id):
+                logger.info(f"OCR task {task_id} was cancelled before processing started")
+                return
             
             # Step 1: Process image with external service (preprocessing)
             processed_result = await external_ocr_service.process_image(image_path, ocr_request)
@@ -468,6 +477,11 @@ class OCRController:
         """
         try:
             logger.info(f"Processing LLM OCR task {task_id} asynchronously")
+            
+            # Check for cancellation before starting
+            if self.is_task_cancelled(task_id):
+                logger.info(f"LLM OCR task {task_id} was cancelled before processing started")
+                return
             
             # Step 1: Process image with external service (preprocessing)
             ocr_request = OCRRequest(
@@ -887,6 +901,11 @@ class OCRController:
         try:
             logger.info(f"Processing PDF OCR task {task_id} asynchronously")
             
+            # Check for cancellation before starting
+            if self.is_task_cancelled(task_id):
+                logger.info(f"PDF task {task_id} was cancelled before processing started")
+                return
+            
             # Process PDF
             result = await pdf_ocr_service.process_pdf(pdf_path, pdf_request)
             
@@ -937,6 +956,11 @@ class OCRController:
         """
         try:
             logger.info(f"Processing PDF LLM OCR task {task_id} asynchronously")
+            
+            # Check for cancellation before starting
+            if self.is_task_cancelled(task_id):
+                logger.info(f"PDF LLM task {task_id} was cancelled before processing started")
+                return
             
             # Process PDF with LLM
             result = await pdf_ocr_service.process_pdf_with_llm(pdf_path, pdf_llm_request)
@@ -1244,6 +1268,11 @@ class OCRController:
         try:
             logger.info(f"Starting async streaming PDF processing for task {task_id}")
             
+            # Check for cancellation before starting
+            if self.is_task_cancelled(task_id):
+                logger.info(f"Streaming PDF task {task_id} was cancelled before processing started")
+                return
+            
             # Get streaming queue
             streaming_queue = self.streaming_queues.get(task_id)
             if not streaming_queue:
@@ -1305,6 +1334,11 @@ class OCRController:
         try:
             logger.info(f"Starting async streaming PDF LLM processing for task {task_id}")
             
+            # Check for cancellation before starting
+            if self.is_task_cancelled(task_id):
+                logger.info(f"Streaming PDF LLM task {task_id} was cancelled before processing started")
+                return
+            
             # Get streaming queue
             streaming_queue = self.streaming_queues.get(task_id)
             if not streaming_queue:
@@ -1348,6 +1382,241 @@ class OCRController:
         finally:
             # Cleanup temporary file
             await self._cleanup_file(pdf_path)
+
+    # --- Task Cancellation Methods ---
+
+    def is_task_cancelled(self, task_id: str) -> bool:
+        """
+        Check if a task has been cancelled.
+        
+        Args:
+            task_id: Unique task identifier
+            
+        Returns:
+            bool: True if task is cancelled
+        """
+        return task_id in self.cancelled_tasks
+
+    async def cancel_ocr_task(self, task_id: str, reason: str = "User requested cancellation") -> CancelTaskResponse:
+        """
+        Cancel an OCR task.
+        
+        Args:
+            task_id: Unique task identifier
+            reason: Cancellation reason
+            
+        Returns:
+            CancelTaskResponse: Cancellation confirmation
+            
+        Raises:
+            HTTPException: If task not found or already completed
+        """
+        if task_id not in self.tasks:
+            raise HTTPException(status_code=404, detail=f"OCR task {task_id} not found")
+        
+        task = self.tasks[task_id]
+        
+        # Check if task is already completed/failed
+        if task.status in ["completed", "failed", "cancelled"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot cancel task {task_id}: already {task.status}"
+            )
+        
+        # Mark task as cancelled
+        self.cancelled_tasks.add(task_id)
+        self.cancellation_reasons[task_id] = reason
+        
+        # Update task status
+        cancelled_at = datetime.utcnow()
+        task.status = TaskStatus.CANCELLED
+        task.cancellation_reason = reason
+        task.cancelled_at = cancelled_at
+        task.completed_at = cancelled_at
+        
+        logger.info(f"OCR task {task_id} cancelled: {reason}")
+        
+        return CancelTaskResponse(
+            task_id=task_id,
+            status=TaskStatus.CANCELLED,
+            message="OCR task successfully cancelled",
+            cancelled_at=cancelled_at,
+            cancellation_reason=reason
+        )
+
+    async def cancel_pdf_task(self, task_id: str, reason: str = "User requested cancellation") -> CancelTaskResponse:
+        """
+        Cancel a PDF OCR task.
+        
+        Args:
+            task_id: Unique task identifier
+            reason: Cancellation reason
+            
+        Returns:
+            CancelTaskResponse: Cancellation confirmation
+            
+        Raises:
+            HTTPException: If task not found or already completed
+        """
+        if task_id not in self.pdf_tasks:
+            raise HTTPException(status_code=404, detail=f"PDF task {task_id} not found")
+        
+        task = self.pdf_tasks[task_id]
+        
+        # Check if task is already completed/failed
+        if task.status in ["completed", "failed", "cancelled"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot cancel task {task_id}: already {task.status}"
+            )
+        
+        # Mark task as cancelled
+        self.cancelled_tasks.add(task_id)
+        self.cancellation_reasons[task_id] = reason
+        
+        # Update task status
+        cancelled_at = datetime.utcnow()
+        task.status = TaskStatus.CANCELLED
+        task.cancellation_reason = reason
+        task.cancelled_at = cancelled_at
+        task.completed_at = cancelled_at
+        
+        # Send cancellation to streaming queue if exists
+        if task_id in self.streaming_queues:
+            try:
+                await self.streaming_queues[task_id].put(None)  # Signal stream end
+            except Exception as e:
+                logger.warning(f"Failed to signal stream cancellation for {task_id}: {e}")
+        
+        logger.info(f"PDF task {task_id} cancelled: {reason}")
+        
+        return CancelTaskResponse(
+            task_id=task_id,
+            status=TaskStatus.CANCELLED,
+            message="PDF task successfully cancelled",
+            cancelled_at=cancelled_at,
+            cancellation_reason=reason
+        )
+
+    async def cancel_pdf_llm_task(self, task_id: str, reason: str = "User requested cancellation") -> CancelTaskResponse:
+        """
+        Cancel a PDF LLM OCR task.
+        
+        Args:
+            task_id: Unique task identifier
+            reason: Cancellation reason
+            
+        Returns:
+            CancelTaskResponse: Cancellation confirmation
+            
+        Raises:
+            HTTPException: If task not found or already completed
+        """
+        if task_id not in self.pdf_llm_tasks:
+            raise HTTPException(status_code=404, detail=f"PDF LLM task {task_id} not found")
+        
+        task = self.pdf_llm_tasks[task_id]
+        
+        # Check if task is already completed/failed
+        if task.status in ["completed", "failed", "cancelled"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot cancel task {task_id}: already {task.status}"
+            )
+        
+        # Mark task as cancelled
+        self.cancelled_tasks.add(task_id)
+        self.cancellation_reasons[task_id] = reason
+        
+        # Update task status
+        cancelled_at = datetime.utcnow()
+        task.status = TaskStatus.CANCELLED
+        task.cancellation_reason = reason
+        task.cancelled_at = cancelled_at
+        task.completed_at = cancelled_at
+        
+        # Send cancellation to streaming queue if exists
+        if task_id in self.streaming_queues:
+            try:
+                await self.streaming_queues[task_id].put(None)  # Signal stream end
+            except Exception as e:
+                logger.warning(f"Failed to signal stream cancellation for {task_id}: {e}")
+        
+        logger.info(f"PDF LLM task {task_id} cancelled: {reason}")
+        
+        return CancelTaskResponse(
+            task_id=task_id,
+            status=TaskStatus.CANCELLED,
+            message="PDF LLM task successfully cancelled",
+            cancelled_at=cancelled_at,
+            cancellation_reason=reason
+        )
+
+    async def cancel_llm_task(self, task_id: str, reason: str = "User requested cancellation") -> CancelTaskResponse:
+        """
+        Cancel an LLM OCR task.
+        
+        Args:
+            task_id: Unique task identifier
+            reason: Cancellation reason
+            
+        Returns:
+            CancelTaskResponse: Cancellation confirmation
+            
+        Raises:
+            HTTPException: If task not found or already completed
+        """
+        if task_id not in self.llm_tasks:
+            raise HTTPException(status_code=404, detail=f"LLM task {task_id} not found")
+        
+        task = self.llm_tasks[task_id]
+        
+        # Check if task is already completed/failed
+        if task.status in ["completed", "failed", "cancelled"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot cancel task {task_id}: already {task.status}"
+            )
+        
+        # Mark task as cancelled
+        self.cancelled_tasks.add(task_id)
+        self.cancellation_reasons[task_id] = reason
+        
+        # Update task status
+        cancelled_at = datetime.utcnow()
+        task.status = TaskStatus.CANCELLED
+        task.cancellation_reason = reason
+        task.cancelled_at = cancelled_at
+        task.completed_at = cancelled_at
+        
+        logger.info(f"LLM task {task_id} cancelled: {reason}")
+        
+        return CancelTaskResponse(
+            task_id=task_id,
+            status=TaskStatus.CANCELLED,
+            message="LLM task successfully cancelled",
+            cancelled_at=cancelled_at,
+            cancellation_reason=reason
+        )
+
+    async def cancel_streaming_task(self, task_id: str, reason: str = "User requested cancellation") -> CancelTaskResponse:
+        """
+        Cancel a streaming task (PDF or PDF LLM).
+        
+        Args:
+            task_id: Unique task identifier
+            reason: Cancellation reason
+            
+        Returns:
+            CancelTaskResponse: Cancellation confirmation
+        """
+        # Try to find task in PDF tasks first, then PDF LLM tasks
+        if task_id in self.pdf_tasks:
+            return await self.cancel_pdf_task(task_id, reason)
+        elif task_id in self.pdf_llm_tasks:
+            return await self.cancel_pdf_llm_task(task_id, reason)
+        else:
+            raise HTTPException(status_code=404, detail=f"Streaming task {task_id} not found")
 
 # Global OCR controller instance
 ocr_controller = OCRController() 

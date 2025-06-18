@@ -75,10 +75,18 @@ class OCRResponse(BaseModel):
         default=None,
         description="Error message if processing failed"
     )
+    cancellation_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for task cancellation if cancelled"
+    )
     created_at: datetime = Field(description="Task creation timestamp")
     completed_at: Optional[datetime] = Field(
         default=None,
         description="Task completion timestamp"
+    )
+    cancelled_at: Optional[datetime] = Field(
+        default=None,
+        description="Task cancellation timestamp"
     )
     
     class Config:
@@ -267,10 +275,18 @@ class OCRLLMResponse(BaseModel):
         default=None,
         description="Error message if processing failed"
     )
+    cancellation_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for task cancellation if cancelled"
+    )
     created_at: datetime = Field(description="Task creation timestamp")
     completed_at: Optional[datetime] = Field(
         default=None,
         description="Task completion timestamp"
+    )
+    cancelled_at: Optional[datetime] = Field(
+        default=None,
+        description="Task cancellation timestamp"
     )
     
     class Config:
@@ -409,10 +425,18 @@ class PDFOCRResponse(BaseModel):
         default=None,
         description="Error message if processing failed"
     )
+    cancellation_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for task cancellation if cancelled"
+    )
     created_at: datetime = Field(description="Task creation timestamp")
     completed_at: Optional[datetime] = Field(
         default=None,
         description="Task completion timestamp"
+    )
+    cancelled_at: Optional[datetime] = Field(
+        default=None,
+        description="Task cancellation timestamp"
     )
     
     class Config:
@@ -565,10 +589,18 @@ class PDFLLMOCRResponse(BaseModel):
         default=None,
         description="Error message if processing failed"
     )
+    cancellation_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for task cancellation if cancelled"
+    )
     created_at: datetime = Field(description="Task creation timestamp")
     completed_at: Optional[datetime] = Field(
         default=None,
         description="Task completion timestamp"
+    )
+    cancelled_at: Optional[datetime] = Field(
+        default=None,
+        description="Task cancellation timestamp"
     )
     
     class Config:
@@ -632,7 +664,7 @@ class PDFPageStreamResult(BaseModel):
 class PDFStreamingStatus(BaseModel):
     """Streaming status update for PDF processing."""
     task_id: str = Field(description="Unique task identifier")
-    status: str = Field(description="Processing status: 'processing', 'page_completed', 'completed', 'failed'")
+    status: str = Field(description="Processing status: 'processing', 'page_completed', 'completed', 'failed', 'cancelled'")
     current_page: int = Field(description="Current page being processed (0 if not started)")
     total_pages: int = Field(description="Total number of pages in PDF")
     processed_pages: int = Field(description="Number of pages successfully processed")
@@ -733,7 +765,7 @@ class PDFPageLLMStreamResult(BaseModel):
 class PDFLLMStreamingStatus(BaseModel):
     """Streaming status update for PDF LLM processing."""
     task_id: str = Field(description="Unique task identifier")
-    status: str = Field(description="Processing status: 'processing', 'page_completed', 'completed', 'failed'")
+    status: str = Field(description="Processing status: 'processing', 'page_completed', 'completed', 'failed', 'cancelled'")
     current_page: int = Field(description="Current page being processed (0 if not started)")
     total_pages: int = Field(description="Total number of pages in PDF")
     processed_pages: int = Field(description="Number of pages successfully processed")
@@ -776,4 +808,62 @@ class PDFLLMStreamingStatus(BaseModel):
                 "processing_speed": 0.24,
                 "timestamp": "2024-01-15T10:30:03Z"
             }
-        } 
+        }
+
+
+# --- Task Cancellation Models ---
+
+class TaskStatus(str, Enum):
+    """Enumeration for task statuses."""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    PAGE_COMPLETED = "page_completed"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class CancelTaskRequest(BaseModel):
+    """Request model for task cancellation."""
+    reason: Optional[str] = Field(
+        default="User requested cancellation",
+        description="Reason for cancellation"
+    )
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "reason": "User requested cancellation"
+            }
+        }
+
+
+class CancelTaskResponse(BaseModel):
+    """Response model for task cancellation."""
+    task_id: str = Field(description="Unique task identifier")
+    status: str = Field(description="Updated task status")
+    message: str = Field(description="Cancellation confirmation message")
+    cancelled_at: datetime = Field(description="Cancellation timestamp")
+    cancellation_reason: str = Field(description="Reason for cancellation")
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "task_id": "12345678-1234-1234-1234-123456789012",
+                "status": "cancelled",
+                "message": "Task successfully cancelled",
+                "cancelled_at": "2024-01-15T10:35:00Z",
+                "cancellation_reason": "User requested cancellation"
+            }
+        }
+
+
+class TaskCancellationError(Exception):
+    """Exception raised when a task has been cancelled during processing."""
+    
+    def __init__(self, task_id: str, reason: str = "Task was cancelled"):
+        self.task_id = task_id
+        self.reason = reason
+        super().__init__(f"Task {task_id} was cancelled: {reason}") 

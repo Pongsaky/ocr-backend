@@ -14,7 +14,8 @@ from app.models.ocr_models import (
     OCRRequest, OCRResponse, OCRResult, ErrorResponse,
     OCRLLMRequest, OCRLLMResponse, OCRLLMResult,
     PDFOCRRequest, PDFOCRResponse, PDFOCRResult,
-    PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult
+    PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult,
+    CancelTaskRequest, CancelTaskResponse
 )
 from app.controllers.ocr_controller import ocr_controller
 from config.settings import get_settings
@@ -415,6 +416,228 @@ async def cleanup_tasks(request: Request):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to cleanup tasks: {str(e)}"
+        )
+
+
+# --- Task Cancellation Endpoints ---
+
+@router.post(
+    "/ocr/tasks/{task_id}/cancel",
+    response_model=CancelTaskResponse,
+    summary="Cancel OCR Task",
+    description="Cancel a running OCR task. This will stop processing and mark the task as cancelled.",
+    responses={
+        200: {"description": "Task cancelled successfully"},
+        400: {"model": ErrorResponse, "description": "Cannot cancel task (already completed/failed)"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit("20/minute")
+async def cancel_ocr_task(
+    task_id: str,
+    cancel_request: CancelTaskRequest = CancelTaskRequest(),
+    request: Request = None
+):
+    """
+    Cancel a running OCR task.
+    
+    Args:
+        task_id: Unique task identifier
+        cancel_request: Cancellation request details
+        
+    Returns:
+        CancelTaskResponse: Cancellation confirmation
+    """
+    logger.info(f"Cancelling OCR task {task_id}: {cancel_request.reason}")
+    
+    try:
+        result = await ocr_controller.cancel_ocr_task(task_id, cancel_request.reason)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel OCR task {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel task: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/llm-tasks/{task_id}/cancel",
+    response_model=CancelTaskResponse,
+    summary="Cancel LLM OCR Task",
+    description="Cancel a running LLM OCR task. This will stop processing and mark the task as cancelled.",
+    responses={
+        200: {"description": "Task cancelled successfully"},
+        400: {"model": ErrorResponse, "description": "Cannot cancel task (already completed/failed)"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit("20/minute")
+async def cancel_llm_task(
+    task_id: str,
+    cancel_request: CancelTaskRequest = CancelTaskRequest(),
+    request: Request = None
+):
+    """
+    Cancel a running LLM OCR task.
+    
+    Args:
+        task_id: Unique task identifier
+        cancel_request: Cancellation request details
+        
+    Returns:
+        CancelTaskResponse: Cancellation confirmation
+    """
+    logger.info(f"Cancelling LLM OCR task {task_id}: {cancel_request.reason}")
+    
+    try:
+        result = await ocr_controller.cancel_llm_task(task_id, cancel_request.reason)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel LLM OCR task {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel task: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/pdf-tasks/{task_id}/cancel",
+    response_model=CancelTaskResponse,
+    summary="Cancel PDF OCR Task",
+    description="Cancel a running PDF OCR task. This will stop processing and mark the task as cancelled.",
+    responses={
+        200: {"description": "Task cancelled successfully"},
+        400: {"model": ErrorResponse, "description": "Cannot cancel task (already completed/failed)"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit("20/minute")
+async def cancel_pdf_task(
+    task_id: str,
+    cancel_request: CancelTaskRequest = CancelTaskRequest(),
+    request: Request = None
+):
+    """
+    Cancel a running PDF OCR task.
+    
+    Args:
+        task_id: Unique task identifier
+        cancel_request: Cancellation request details
+        
+    Returns:
+        CancelTaskResponse: Cancellation confirmation
+    """
+    logger.info(f"Cancelling PDF OCR task {task_id}: {cancel_request.reason}")
+    
+    try:
+        result = await ocr_controller.cancel_pdf_task(task_id, cancel_request.reason)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel PDF OCR task {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel task: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/pdf-llm-tasks/{task_id}/cancel",
+    response_model=CancelTaskResponse,
+    summary="Cancel PDF LLM OCR Task",
+    description="Cancel a running PDF LLM OCR task. This will stop processing and mark the task as cancelled.",
+    responses={
+        200: {"description": "Task cancelled successfully"},
+        400: {"model": ErrorResponse, "description": "Cannot cancel task (already completed/failed)"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit("20/minute")
+async def cancel_pdf_llm_task(
+    task_id: str,
+    cancel_request: CancelTaskRequest = CancelTaskRequest(),
+    request: Request = None
+):
+    """
+    Cancel a running PDF LLM OCR task.
+    
+    Args:
+        task_id: Unique task identifier
+        cancel_request: Cancellation request details
+        
+    Returns:
+        CancelTaskResponse: Cancellation confirmation
+    """
+    logger.info(f"Cancelling PDF LLM OCR task {task_id}: {cancel_request.reason}")
+    
+    try:
+        result = await ocr_controller.cancel_pdf_llm_task(task_id, cancel_request.reason)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel PDF LLM OCR task {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel task: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/stream/{task_id}/cancel",
+    response_model=CancelTaskResponse,
+    summary="Cancel Streaming Task",
+    description="Cancel a running streaming PDF task (PDF or PDF LLM). This will stop processing and close the stream.",
+    responses={
+        200: {"description": "Streaming task cancelled successfully"},
+        400: {"model": ErrorResponse, "description": "Cannot cancel task (already completed/failed)"},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit("20/minute")
+async def cancel_streaming_task(
+    task_id: str,
+    cancel_request: CancelTaskRequest = CancelTaskRequest(),
+    request: Request = None
+):
+    """
+    Cancel a running streaming task.
+    
+    Args:
+        task_id: Unique task identifier
+        cancel_request: Cancellation request details
+        
+    Returns:
+        CancelTaskResponse: Cancellation confirmation
+    """
+    logger.info(f"Cancelling streaming task {task_id}: {cancel_request.reason}")
+    
+    try:
+        result = await ocr_controller.cancel_streaming_task(task_id, cancel_request.reason)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel streaming task {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel task: {str(e)}"
         )
 
 

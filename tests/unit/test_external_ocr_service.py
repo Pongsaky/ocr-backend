@@ -11,7 +11,7 @@ import httpx
 from PIL import Image
 
 from app.services.external_ocr_service import ExternalOCRService
-from app.models.ocr_models import OCRRequest, OCRResult, ExternalOCRRequest
+from app.models.ocr_models import OCRRequest, OCRResult, ExternalOCRRequest, OCRLLMResult
 
 
 class TestExternalOCRService:
@@ -25,8 +25,22 @@ class TestExternalOCRService:
     @pytest.mark.asyncio
     async def test_process_image_success(self, ocr_service, sample_image_path, sample_ocr_request):
         """Test successful image processing."""
-        with patch.object(ocr_service, '_call_external_api', new_callable=AsyncMock) as mock_api:
-            mock_api.return_value = "Extracted text from image"
+        with patch.object(ocr_service, '_call_external_api', new_callable=AsyncMock) as mock_api, \
+             patch('app.services.ocr_llm_service.ocr_llm_service.process_image_with_llm', new_callable=AsyncMock) as mock_llm:
+            
+            mock_api.return_value = "base64_processed_image_data"
+            mock_llm.return_value = OCRLLMResult(
+                success=True,
+                extracted_text="Extracted text from image",
+                processing_time=1.0,
+                threshold_used=sample_ocr_request.threshold,
+                contrast_level_used=sample_ocr_request.contrast_level,
+                original_ocr_text="",
+                ocr_processing_time=0.5,
+                llm_processing_time=0.5,
+                model_used="gpt-4",
+                prompt_used="Extract text"
+            )
             
             result = await ocr_service.process_image(sample_image_path, sample_ocr_request)
             
@@ -38,6 +52,7 @@ class TestExternalOCRService:
             
             # Verify API was called
             mock_api.assert_called_once()
+            mock_llm.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_process_image_failure(self, ocr_service, sample_image_path, sample_ocr_request):
@@ -86,13 +101,13 @@ class TestExternalOCRService:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             
             mock_response = MagicMock()
-            mock_response.text = '"Extracted text"'
+            mock_response.json.return_value = {"image": "base64_processed_image_data"}
             mock_response.raise_for_status.return_value = None
             mock_client.post.return_value = mock_response
             
             result = await ocr_service._call_external_api(request)
             
-            assert result == "Extracted text"
+            assert result == "base64_processed_image_data"
             mock_client.post.assert_called_once()
     
     @pytest.mark.asyncio
@@ -109,7 +124,7 @@ class TestExternalOCRService:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = httpx.TimeoutException("Timeout")
             
-            with pytest.raises(Exception, match="External OCR service timeout"):
+            with pytest.raises(Exception, match="External.*service timeout"):
                 await ocr_service._call_external_api(request)
     
     @pytest.mark.asyncio
@@ -131,7 +146,7 @@ class TestExternalOCRService:
                 "Server Error", request=None, response=mock_response
             )
             
-            with pytest.raises(Exception, match="External OCR service error: 500"):
+            with pytest.raises(Exception, match="External.*service error: 500"):
                 await ocr_service._call_external_api(request)
     
     @pytest.mark.asyncio

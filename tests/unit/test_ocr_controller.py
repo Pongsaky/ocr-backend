@@ -97,17 +97,45 @@ class TestOCRController:
         with patch.object(ocr_controller, '_validate_upload_file', new_callable=AsyncMock) as mock_validate, \
              patch.object(ocr_controller, '_save_uploaded_file', new_callable=AsyncMock) as mock_save, \
              patch.object(ocr_controller, '_cleanup_file', new_callable=AsyncMock) as mock_cleanup, \
-             patch('app.services.external_ocr_service.external_ocr_service.process_image', new_callable=AsyncMock) as mock_process:
+             patch('app.services.external_ocr_service.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external, \
+             patch('app.services.ocr_llm_service.ocr_llm_service.process_image_with_llm', new_callable=AsyncMock) as mock_llm:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            from app.models.ocr_models import OCRLLMResult
             
             mock_save.return_value = Path("/tmp/test_image.jpg")
-            mock_process.return_value = sample_ocr_result
+            
+            # Mock external service result (preprocessing)
+            mock_external_result = ImageProcessingResult(
+                success=True,
+                processed_image_base64="base64_data",
+                processing_time=1.0
+            )
+            mock_external.return_value = mock_external_result
+            
+            # Mock LLM service result
+            mock_llm_result = OCRLLMResult(
+                success=True,
+                extracted_text="Test text",
+                processing_time=2.0,
+                threshold_used=128,
+                contrast_level_used=1.0,
+                original_ocr_text="",
+                ocr_processing_time=1.0,
+                llm_processing_time=1.0,
+                model_used="gpt-4",
+                prompt_used="Extract text"
+            )
+            mock_llm.return_value = mock_llm_result
             
             result = await ocr_controller.process_image_sync(mock_upload_file, sample_ocr_request)
             
-            assert result == sample_ocr_result
+            assert result.success is True
+            assert result.extracted_text == "Test text"
             mock_validate.assert_called_once()
             mock_save.assert_called_once()
-            mock_process.assert_called_once()
+            mock_external.assert_called_once()
+            mock_llm.assert_called_once()
             mock_cleanup.assert_called_once()
     
     @pytest.mark.asyncio

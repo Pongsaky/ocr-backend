@@ -23,7 +23,9 @@ from app.models.ocr_models import (
     OCRRequest, OCRLLMRequest,
     # New streaming models
     PDFPageStreamResult, PDFStreamingStatus,
-    PDFPageLLMStreamResult, PDFLLMStreamingStatus
+    PDFPageLLMStreamResult, PDFLLMStreamingStatus,
+    # Cancellation models
+    TaskCancellationError
 )
 from app.services.external_ocr_service import external_ocr_service
 from app.services.ocr_llm_service import ocr_llm_service
@@ -1030,6 +1032,9 @@ class PDFOCRService:
             try:
                 logger.debug(f"Processing page {page_num} with streaming: {image_path}")
                 
+                # Check for task cancellation before processing each page
+                await self.check_task_cancellation(task_id)
+                
                 # Process single page
                 result = await external_ocr_service.process_image(image_path, ocr_request)
                 page_processing_time = time.time() - page_start_time
@@ -1198,6 +1203,9 @@ class PDFOCRService:
             try:
                 logger.debug(f"Processing page {page_num} with LLM streaming: {image_path}")
                 
+                # Check for task cancellation before processing each page
+                await self.check_task_cancellation(task_id)
+                
                 # Process single page with LLM
                 result = await self._process_single_image_with_llm(image_path, page_num, ocr_llm_request)
                 page_processing_time = time.time() - page_start_time
@@ -1355,6 +1363,24 @@ class PDFOCRService:
             logger.debug(f"Sent LLM streaming update: {status.status} - Page {status.current_page}/{status.total_pages}")
         except Exception as e:
             logger.error(f"Failed to send LLM streaming update: {str(e)}")
+
+    async def check_task_cancellation(self, task_id: str) -> None:
+        """
+        Check if a task has been cancelled and raise exception if so.
+        
+        Args:
+            task_id: Unique task identifier
+            
+        Raises:
+            TaskCancellationError: If task has been cancelled
+        """
+        # Import here to avoid circular imports
+        from app.controllers.ocr_controller import ocr_controller
+        
+        if ocr_controller.is_task_cancelled(task_id):
+            reason = ocr_controller.cancellation_reasons.get(task_id, "Task was cancelled")
+            logger.info(f"Task {task_id} cancellation detected: {reason}")
+            raise TaskCancellationError(task_id, reason)
 
 
 # Global PDF OCR service instance
