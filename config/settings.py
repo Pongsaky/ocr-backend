@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     ENABLE_IMAGE_SCALING: bool = os.getenv("ENABLE_IMAGE_SCALING", "True").lower() in ("true", "1", "t")
     
     # --- PDF Processing Settings ---
-    MAX_PDF_PAGES: int = int(os.getenv("MAX_PDF_PAGES", "10"))
+    MAX_PDF_PAGES: int = int(os.getenv("MAX_PDF_PAGES", "20"))
     MAX_PDF_SIZE: int = int(os.getenv("MAX_PDF_SIZE", "52428800"))  # 50MB
     ALLOWED_PDF_EXTENSIONS: List[str] = json.loads(
         os.getenv(

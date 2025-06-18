@@ -594,4 +594,186 @@ class PDFLLMOCRResponse(BaseModel):
                 "created_at": "2024-01-15T10:30:00Z",
                 "completed_at": "2024-01-15T10:30:09Z"
             }
+        }
+
+
+# --- PDF Streaming Models ---
+
+class PDFPageStreamResult(BaseModel):
+    """Streaming result for a single PDF page."""
+    page_number: int = Field(description="Page number (1-indexed)")
+    extracted_text: str = Field(description="Extracted text from the page")
+    processing_time: float = Field(description="Processing time for this page in seconds")
+    success: bool = Field(description="Whether page processing was successful")
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error message if page processing failed"
+    )
+    threshold_used: int = Field(description="Threshold value used for this page")
+    contrast_level_used: float = Field(description="Contrast level used for this page")
+    timestamp: datetime = Field(description="Timestamp when page processing completed")
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "page_number": 1,
+                "extracted_text": "Sample extracted text from page 1",
+                "processing_time": 2.45,
+                "success": True,
+                "error_message": None,
+                "threshold_used": 500,
+                "contrast_level_used": 1.3,
+                "timestamp": "2024-01-15T10:30:01Z"
+            }
+        }
+
+
+class PDFStreamingStatus(BaseModel):
+    """Streaming status update for PDF processing."""
+    task_id: str = Field(description="Unique task identifier")
+    status: str = Field(description="Processing status: 'processing', 'page_completed', 'completed', 'failed'")
+    current_page: int = Field(description="Current page being processed (0 if not started)")
+    total_pages: int = Field(description="Total number of pages in PDF")
+    processed_pages: int = Field(description="Number of pages successfully processed")
+    failed_pages: int = Field(default=0, description="Number of pages that failed processing")
+    latest_page_result: Optional[PDFPageStreamResult] = Field(
+        default=None,
+        description="Latest single page result (Type 1: incremental update)"
+    )
+    cumulative_results: List[PDFPageStreamResult] = Field(
+        default=[],
+        description="All processed page results so far (Type 2: complete state)"
+    )
+    progress_percentage: float = Field(description="Processing progress percentage (0-100)")
+    estimated_time_remaining: Optional[float] = Field(
+        default=None,
+        description="Estimated time remaining in seconds"
+    )
+    processing_speed: Optional[float] = Field(
+        default=None,
+        description="Pages per second processing speed"
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error message if processing failed"
+    )
+    timestamp: datetime = Field(description="Timestamp of this status update")
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "task_id": "12345678-1234-1234-1234-123456789012",
+                "status": "page_completed",
+                "current_page": 2,
+                "total_pages": 5,
+                "processed_pages": 2,
+                "failed_pages": 0,
+                "latest_page_result": {
+                    "page_number": 2,
+                    "extracted_text": "Text from page 2",
+                    "processing_time": 2.1,
+                    "success": True,
+                    "threshold_used": 500,
+                    "contrast_level_used": 1.3,
+                    "timestamp": "2024-01-15T10:30:03Z"
+                },
+                "cumulative_results": [
+                    # All processed pages so far
+                ],
+                "progress_percentage": 40.0,
+                "estimated_time_remaining": 6.3,
+                "processing_speed": 0.48,
+                "timestamp": "2024-01-15T10:30:03Z"
+            }
+        }
+
+
+class PDFPageLLMStreamResult(BaseModel):
+    """Streaming result for a single PDF page with LLM enhancement."""
+    page_number: int = Field(description="Page number (1-indexed)")
+    extracted_text: str = Field(description="LLM-enhanced extracted text from the page")
+    original_ocr_text: str = Field(description="Original OCR text from the page")
+    processing_time: float = Field(description="Total processing time for this page")
+    ocr_processing_time: float = Field(description="OCR processing time for this page")
+    llm_processing_time: float = Field(description="LLM processing time for this page")
+    success: bool = Field(description="Whether page processing was successful")
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error message if page processing failed"
+    )
+    threshold_used: int = Field(description="Threshold value used for this page")
+    contrast_level_used: float = Field(description="Contrast level used for this page")
+    model_used: str = Field(description="LLM model used for this page")
+    prompt_used: str = Field(description="Prompt used for LLM on this page")
+    timestamp: datetime = Field(description="Timestamp when page processing completed")
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "page_number": 1,
+                "extracted_text": "LLM-enhanced text from page 1",
+                "original_ocr_text": "Original OCR text from page 1",
+                "processing_time": 4.2,
+                "ocr_processing_time": 2.1,
+                "llm_processing_time": 2.1,
+                "success": True,
+                "error_message": None,
+                "threshold_used": 500,
+                "contrast_level_used": 1.3,
+                "model_used": "nectec/Pathumma-vision-ocr-lora-dev",
+                "prompt_used": "ข้อความในภาพนี้",
+                "timestamp": "2024-01-15T10:30:01Z"
+            }
+        }
+
+
+class PDFLLMStreamingStatus(BaseModel):
+    """Streaming status update for PDF LLM processing."""
+    task_id: str = Field(description="Unique task identifier")
+    status: str = Field(description="Processing status: 'processing', 'page_completed', 'completed', 'failed'")
+    current_page: int = Field(description="Current page being processed (0 if not started)")
+    total_pages: int = Field(description="Total number of pages in PDF")
+    processed_pages: int = Field(description="Number of pages successfully processed")
+    failed_pages: int = Field(default=0, description="Number of pages that failed processing")
+    latest_page_result: Optional[PDFPageLLMStreamResult] = Field(
+        default=None,
+        description="Latest single page result (Type 1: incremental update)"
+    )
+    cumulative_results: List[PDFPageLLMStreamResult] = Field(
+        default=[],
+        description="All processed page results so far (Type 2: complete state)"
+    )
+    progress_percentage: float = Field(description="Processing progress percentage (0-100)")
+    estimated_time_remaining: Optional[float] = Field(
+        default=None,
+        description="Estimated time remaining in seconds"
+    )
+    processing_speed: Optional[float] = Field(
+        default=None,
+        description="Pages per second processing speed"
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error message if processing failed"
+    )
+    timestamp: datetime = Field(description="Timestamp of this status update")
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "task_id": "12345678-1234-1234-1234-123456789012",
+                "status": "page_completed",
+                "current_page": 2,
+                "total_pages": 5,
+                "processed_pages": 2,
+                "failed_pages": 0,
+                "progress_percentage": 40.0,
+                "estimated_time_remaining": 12.6,
+                "processing_speed": 0.24,
+                "timestamp": "2024-01-15T10:30:03Z"
+            }
         } 

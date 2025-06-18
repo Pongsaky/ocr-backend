@@ -5,9 +5,10 @@ OCR controller for handling OCR business logic.
 import uuid
 import asyncio
 import time
+import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException, UploadFile
@@ -38,10 +39,12 @@ class OCRController:
         self.llm_tasks: Dict[str, OCRLLMResponse] = {}
         self.pdf_tasks: Dict[str, PDFOCRResponse] = {}
         self.pdf_llm_tasks: Dict[str, PDFLLMOCRResponse] = {}
+        # New streaming queues for real-time updates
+        self.streaming_queues: Dict[str, asyncio.Queue] = {}
         self.executor = ThreadPoolExecutor(
             max_workers=settings.MAX_CONCURRENT_TASKS
         )
-        logger.info("OCR Controller initialized")
+        logger.info("OCR Controller initialized with streaming support")
     
     async def process_image(
         self, 
@@ -956,7 +959,7 @@ class OCRController:
             logger.error(f"Async PDF LLM OCR processing failed for task {task_id}: {str(e)}")
             
             # Update task with error
-            self.pdf_llm_tasks[task_id] = PDFLLMOCRResponse(
+            error_response = PDFLLMOCRResponse(
                 task_id=task_id,
                 status="failed",
                 result=None,
@@ -964,7 +967,9 @@ class OCRController:
                 created_at=self.pdf_llm_tasks[task_id].created_at,
                 completed_at=datetime.utcnow()
             )
-        
+            
+            self.pdf_llm_tasks[task_id] = error_response
+            
         finally:
             # Cleanup temporary file
             await self._cleanup_file(pdf_path)
@@ -1026,6 +1031,323 @@ class OCRController:
         logger.info(f"Cleaned up {len(completed_tasks)} completed tasks")
         return len(completed_tasks)
 
+    # --- STREAMING METHODS ---
+
+    async def process_pdf_with_streaming(
+        self, 
+        file: UploadFile, 
+        pdf_request: PDFOCRRequest
+    ) -> PDFOCRResponse:
+        """
+        Process uploaded PDF with streaming support.
+        
+        Args:
+            file: Uploaded PDF file
+            pdf_request: PDF OCR processing parameters
+            
+        Returns:
+            PDFOCRResponse: Processing response with task ID for streaming
+            
+        Raises:
+            HTTPException: If file validation fails
+        """
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        created_at = datetime.utcnow()
+        
+        logger.info(f"Starting streaming PDF OCR task {task_id} for file {file.filename}")
+        
+        try:
+            # Validate PDF file
+            await self._validate_pdf_file(file)
+            
+            # Save uploaded PDF
+            pdf_path = await self._save_uploaded_file(file, task_id)
+            
+            # Create streaming queue for this task
+            streaming_queue = asyncio.Queue()
+            self.streaming_queues[task_id] = streaming_queue
+            
+            # Create initial task response
+            task_response = PDFOCRResponse(
+                task_id=task_id,
+                status="processing",
+                result=None,
+                error_message=None,
+                created_at=created_at,
+                completed_at=None
+            )
+            
+            # Store task
+            self.pdf_tasks[task_id] = task_response
+            
+            # Start processing asynchronously with streaming
+            asyncio.create_task(
+                self._process_pdf_with_streaming_async(task_id, pdf_path, pdf_request)
+            )
+            
+            return task_response
+            
+        except Exception as e:
+            logger.error(f"Failed to start streaming PDF OCR task {task_id}: {str(e)}")
+            
+            error_response = PDFOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=created_at,
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_tasks[task_id] = error_response
+            return error_response
+
+    async def process_pdf_with_llm_streaming(
+        self, 
+        file: UploadFile, 
+        pdf_llm_request: PDFLLMOCRRequest
+    ) -> PDFLLMOCRResponse:
+        """
+        Process uploaded PDF with LLM enhancement and streaming support.
+        
+        Args:
+            file: Uploaded PDF file
+            pdf_llm_request: PDF LLM OCR processing parameters
+            
+        Returns:
+            PDFLLMOCRResponse: Processing response with task ID for streaming
+            
+        Raises:
+            HTTPException: If file validation fails
+        """
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        created_at = datetime.utcnow()
+        
+        logger.info(f"Starting streaming PDF LLM OCR task {task_id} for file {file.filename}")
+        
+        try:
+            # Validate PDF file
+            await self._validate_pdf_file(file)
+            
+            # Save uploaded PDF
+            pdf_path = await self._save_uploaded_file(file, task_id)
+            
+            # Create streaming queue for this task
+            streaming_queue = asyncio.Queue()
+            self.streaming_queues[task_id] = streaming_queue
+            
+            # Create initial task response
+            task_response = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="processing",
+                result=None,
+                error_message=None,
+                created_at=created_at,
+                completed_at=None
+            )
+            
+            # Store task
+            self.pdf_llm_tasks[task_id] = task_response
+            
+            # Start processing asynchronously with streaming
+            asyncio.create_task(
+                self._process_pdf_with_llm_streaming_async(task_id, pdf_path, pdf_llm_request)
+            )
+            
+            return task_response
+            
+        except Exception as e:
+            logger.error(f"Failed to start streaming PDF LLM OCR task {task_id}: {str(e)}")
+            
+            error_response = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=created_at,
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_llm_tasks[task_id] = error_response
+            return error_response
+
+    async def stream_pdf_progress(self, task_id: str) -> AsyncGenerator[str, None]:
+        """
+        Stream PDF processing progress via Server-Sent Events.
+        
+        Args:
+            task_id: Unique task identifier
+            
+        Yields:
+            str: Server-Sent Events formatted progress updates
+            
+        Raises:
+            HTTPException: If task not found
+        """
+        # Check if task exists
+        if task_id not in self.streaming_queues:
+            logger.warning(f"Streaming task {task_id} not found")
+            yield f"data: {json.dumps({'error': 'Task not found'})}\n\n"
+            return
+        
+        queue = self.streaming_queues[task_id]
+        logger.info(f"Starting stream for task {task_id}")
+        
+        try:
+            while True:
+                try:
+                    # Wait for update with timeout
+                    update = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    
+                    # Check for sentinel (None = stream complete)
+                    if update is None:
+                        logger.info(f"Stream completed for task {task_id}")
+                        break
+                    
+                    # Convert update to JSON and send as SSE
+                    update_json = update.model_dump_json()
+                    yield f"data: {update_json}\n\n"
+                    
+                    logger.debug(f"Sent streaming update for {task_id}: {update.status}")
+                    
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield f"data: {json.dumps({'keepalive': True, 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+                    logger.debug(f"Sent keepalive for task {task_id}")
+                    
+        except Exception as e:
+            logger.error(f"Stream error for task {task_id}: {str(e)}")
+            yield f"data: {json.dumps({'error': f'Stream error: {str(e)}'})}\n\n"
+            
+        finally:
+            # Cleanup streaming queue
+            if task_id in self.streaming_queues:
+                del self.streaming_queues[task_id]
+                logger.debug(f"Cleaned up streaming queue for task {task_id}")
+
+    async def _process_pdf_with_streaming_async(
+        self, 
+        task_id: str, 
+        pdf_path: Path, 
+        pdf_request: PDFOCRRequest
+    ) -> None:
+        """
+        Process PDF asynchronously with streaming updates.
+        
+        Args:
+            task_id: Unique task identifier
+            pdf_path: Path to the uploaded PDF file
+            pdf_request: PDF processing parameters
+        """
+        try:
+            logger.info(f"Starting async streaming PDF processing for task {task_id}")
+            
+            # Get streaming queue
+            streaming_queue = self.streaming_queues.get(task_id)
+            if not streaming_queue:
+                logger.error(f"No streaming queue found for task {task_id}")
+                return
+            
+            # Process PDF with streaming
+            result = await pdf_ocr_service.process_pdf_with_streaming(
+                pdf_path, pdf_request, task_id, streaming_queue
+            )
+            
+            # Update task status
+            completed_response = PDFOCRResponse(
+                task_id=task_id,
+                status="completed" if result.success else "failed",
+                result=result,
+                error_message=None if result.success else "Processing completed with errors",
+                created_at=self.pdf_tasks[task_id].created_at,
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_tasks[task_id] = completed_response
+            
+            logger.info(f"Async streaming PDF processing completed for task {task_id}")
+            
+        except Exception as e:
+            logger.error(f"Async streaming PDF processing failed for task {task_id}: {str(e)}")
+            
+            # Update task with error
+            error_response = PDFOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=self.pdf_tasks[task_id].created_at if task_id in self.pdf_tasks else datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_tasks[task_id] = error_response
+            
+        finally:
+            # Cleanup temporary file
+            await self._cleanup_file(pdf_path)
+
+    async def _process_pdf_with_llm_streaming_async(
+        self, 
+        task_id: str, 
+        pdf_path: Path, 
+        pdf_llm_request: PDFLLMOCRRequest
+    ) -> None:
+        """
+        Process PDF with LLM asynchronously with streaming updates.
+        
+        Args:
+            task_id: Unique task identifier
+            pdf_path: Path to the uploaded PDF file
+            pdf_llm_request: PDF LLM processing parameters
+        """
+        try:
+            logger.info(f"Starting async streaming PDF LLM processing for task {task_id}")
+            
+            # Get streaming queue
+            streaming_queue = self.streaming_queues.get(task_id)
+            if not streaming_queue:
+                logger.error(f"No streaming queue found for task {task_id}")
+                return
+            
+            # Process PDF with LLM and streaming
+            result = await pdf_ocr_service.process_pdf_with_llm_streaming(
+                pdf_path, pdf_llm_request, task_id, streaming_queue
+            )
+            
+            # Update task status
+            completed_response = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="completed" if result.success else "failed",
+                result=result,
+                error_message=None if result.success else "Processing completed with errors",
+                created_at=self.pdf_llm_tasks[task_id].created_at,
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_llm_tasks[task_id] = completed_response
+            
+            logger.info(f"Async streaming PDF LLM processing completed for task {task_id}")
+            
+        except Exception as e:
+            logger.error(f"Async streaming PDF LLM processing failed for task {task_id}: {str(e)}")
+            
+            # Update task with error
+            error_response = PDFLLMOCRResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=self.pdf_llm_tasks[task_id].created_at if task_id in self.pdf_llm_tasks else datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            )
+            
+            self.pdf_llm_tasks[task_id] = error_response
+            
+        finally:
+            # Cleanup temporary file
+            await self._cleanup_file(pdf_path)
 
 # Global OCR controller instance
 ocr_controller = OCRController() 

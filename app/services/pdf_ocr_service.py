@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 import tempfile
 import os
+from datetime import datetime
 
 import fitz  # PyMuPDF
 from PIL import Image
@@ -19,7 +20,10 @@ from app.logger_config import get_logger
 from app.models.ocr_models import (
     PDFOCRRequest, PDFOCRResult, PDFPageResult,
     PDFLLMOCRRequest, PDFLLMOCRResult, PDFPageLLMResult,
-    OCRRequest, OCRLLMRequest
+    OCRRequest, OCRLLMRequest,
+    # New streaming models
+    PDFPageStreamResult, PDFStreamingStatus,
+    PDFPageLLMStreamResult, PDFLLMStreamingStatus
 )
 from app.services.external_ocr_service import external_ocr_service
 from app.services.ocr_llm_service import ocr_llm_service
@@ -689,6 +693,668 @@ class PDFOCRService:
                 "original_ocr_text": "",
                 "ocr_processing_time": ocr_processing_time
             }
+
+    # --- STREAMING METHODS ---
+
+    async def process_pdf_with_streaming(
+        self, 
+        pdf_path: Path, 
+        request: PDFOCRRequest,
+        task_id: str,
+        progress_queue: asyncio.Queue
+    ) -> PDFOCRResult:
+        """
+        Process PDF file with real-time streaming updates.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            request: PDF OCR processing parameters
+            task_id: Unique task identifier
+            progress_queue: Queue for streaming progress updates
+            
+        Returns:
+            PDFOCRResult: Complete PDF processing result
+        """
+        start_time = time.time()
+        
+        async with PDFProcessingContext() as context:
+            try:
+                logger.info(f"Starting streaming PDF OCR processing: {pdf_path}")
+                
+                # 1. Validate PDF and get page count
+                page_count = await self._validate_and_get_page_count(pdf_path)
+                logger.info(f"PDF has {page_count} pages for streaming processing")
+                
+                # Send initial status
+                await self._send_streaming_update(
+                    progress_queue,
+                    PDFStreamingStatus(
+                        task_id=task_id,
+                        status="processing",
+                        current_page=0,
+                        total_pages=page_count,
+                        processed_pages=0,
+                        failed_pages=0,
+                        latest_page_result=None,
+                        cumulative_results=[],
+                        progress_percentage=0.0,
+                        estimated_time_remaining=None,
+                        processing_speed=None,
+                        error_message=None,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                # 2. Convert PDF to images
+                pdf_start_time = time.time()
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                pdf_processing_time = time.time() - pdf_start_time
+                
+                logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
+                
+                # 3. Process images with streaming updates
+                ocr_start_time = time.time()
+                page_results, cumulative_stream_results = await self._process_images_with_streaming(
+                    temp_images, request, task_id, progress_queue, start_time
+                )
+                ocr_processing_time = time.time() - ocr_start_time
+                
+                total_processing_time = time.time() - start_time
+                processed_pages = sum(1 for result in page_results if result.success)
+                
+                # Send final completion status
+                await self._send_streaming_update(
+                    progress_queue,
+                    PDFStreamingStatus(
+                        task_id=task_id,
+                        status="completed",
+                        current_page=page_count,
+                        total_pages=page_count,
+                        processed_pages=processed_pages,
+                        failed_pages=page_count - processed_pages,
+                        latest_page_result=None,
+                        cumulative_results=cumulative_stream_results,
+                        progress_percentage=100.0,
+                        estimated_time_remaining=0.0,
+                        processing_speed=page_count / total_processing_time if total_processing_time > 0 else 0.0,
+                        error_message=None,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                # Send sentinel to close stream
+                await progress_queue.put(None)
+                
+                logger.info(
+                    f"Streaming PDF processing completed: {processed_pages}/{page_count} pages successful "
+                    f"in {total_processing_time:.2f}s"
+                )
+                
+                return PDFOCRResult(
+                    success=processed_pages > 0,
+                    total_pages=page_count,
+                    processed_pages=processed_pages,
+                    results=page_results,
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=pdf_processing_time,
+                    ocr_processing_time=ocr_processing_time,
+                    dpi_used=request.dpi
+                )
+                
+            except Exception as e:
+                total_processing_time = time.time() - start_time
+                logger.error(f"Streaming PDF processing failed: {str(e)}")
+                
+                # Send error status
+                await self._send_streaming_update(
+                    progress_queue,
+                    PDFStreamingStatus(
+                        task_id=task_id,
+                        status="failed",
+                        current_page=0,
+                        total_pages=0,
+                        processed_pages=0,
+                        failed_pages=0,
+                        latest_page_result=None,
+                        cumulative_results=[],
+                        progress_percentage=0.0,
+                        estimated_time_remaining=None,
+                        processing_speed=None,
+                        error_message=str(e),
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                # Send sentinel to close stream
+                await progress_queue.put(None)
+                
+                return PDFOCRResult(
+                    success=False,
+                    total_pages=0,
+                    processed_pages=0,
+                    results=[],
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=0.0,
+                    ocr_processing_time=0.0,
+                    dpi_used=request.dpi
+                )
+
+    async def process_pdf_with_llm_streaming(
+        self, 
+        pdf_path: Path, 
+        request: PDFLLMOCRRequest,
+        task_id: str,
+        progress_queue: asyncio.Queue
+    ) -> PDFLLMOCRResult:
+        """
+        Process PDF file with LLM enhancement and real-time streaming updates.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            request: PDF LLM OCR processing parameters
+            task_id: Unique task identifier
+            progress_queue: Queue for streaming progress updates
+            
+        Returns:
+            PDFLLMOCRResult: Complete PDF LLM processing result
+        """
+        start_time = time.time()
+        
+        async with PDFProcessingContext() as context:
+            try:
+                logger.info(f"Starting streaming PDF LLM OCR processing: {pdf_path}")
+                
+                # 1. Validate PDF and get page count
+                page_count = await self._validate_and_get_page_count(pdf_path)
+                logger.info(f"PDF has {page_count} pages for streaming LLM processing")
+                
+                # Send initial status
+                await self._send_llm_streaming_update(
+                    progress_queue,
+                    PDFLLMStreamingStatus(
+                        task_id=task_id,
+                        status="processing",
+                        current_page=0,
+                        total_pages=page_count,
+                        processed_pages=0,
+                        failed_pages=0,
+                        latest_page_result=None,
+                        cumulative_results=[],
+                        progress_percentage=0.0,
+                        estimated_time_remaining=None,
+                        processing_speed=None,
+                        error_message=None,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                # 2. Convert PDF to images
+                pdf_start_time = time.time()
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                pdf_processing_time = time.time() - pdf_start_time
+                
+                logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
+                
+                # 3. Process images with LLM and streaming updates
+                ocr_start_time = time.time()
+                page_results, cumulative_stream_results = await self._process_images_with_llm_streaming(
+                    temp_images, request, task_id, progress_queue, start_time
+                )
+                ocr_processing_time = time.time() - ocr_start_time
+                
+                # 4. Calculate LLM processing time from page results
+                llm_processing_time = sum(result.llm_processing_time for result in page_results if result.success)
+                
+                total_processing_time = time.time() - start_time
+                processed_pages = sum(1 for result in page_results if result.success)
+                
+                # Send final completion status
+                await self._send_llm_streaming_update(
+                    progress_queue,
+                    PDFLLMStreamingStatus(
+                        task_id=task_id,
+                        status="completed",
+                        current_page=page_count,
+                        total_pages=page_count,
+                        processed_pages=processed_pages,
+                        failed_pages=page_count - processed_pages,
+                        latest_page_result=None,
+                        cumulative_results=cumulative_stream_results,
+                        progress_percentage=100.0,
+                        estimated_time_remaining=0.0,
+                        processing_speed=page_count / total_processing_time if total_processing_time > 0 else 0.0,
+                        error_message=None,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                # Send sentinel to close stream
+                await progress_queue.put(None)
+                
+                logger.info(
+                    f"Streaming PDF LLM processing completed: {processed_pages}/{page_count} pages successful "
+                    f"in {total_processing_time:.2f}s (LLM: {llm_processing_time:.2f}s)"
+                )
+                
+                return PDFLLMOCRResult(
+                    success=processed_pages > 0,
+                    total_pages=page_count,
+                    processed_pages=processed_pages,
+                    results=page_results,
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=pdf_processing_time,
+                    ocr_processing_time=ocr_processing_time,
+                    llm_processing_time=llm_processing_time,
+                    dpi_used=request.dpi,
+                    model_used=request.model or settings.OCR_LLM_MODEL,
+                    prompt_used=request.prompt or settings.OCR_LLM_DEFAULT_PROMPT
+                )
+                
+            except Exception as e:
+                total_processing_time = time.time() - start_time
+                logger.error(f"Streaming PDF LLM processing failed: {str(e)}")
+                
+                # Send error status
+                await self._send_llm_streaming_update(
+                    progress_queue,
+                    PDFLLMStreamingStatus(
+                        task_id=task_id,
+                        status="failed",
+                        current_page=0,
+                        total_pages=0,
+                        processed_pages=0,
+                        failed_pages=0,
+                        latest_page_result=None,
+                        cumulative_results=[],
+                        progress_percentage=0.0,
+                        estimated_time_remaining=None,
+                        processing_speed=None,
+                        error_message=str(e),
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                # Send sentinel to close stream
+                await progress_queue.put(None)
+                
+                return PDFLLMOCRResult(
+                    success=False,
+                    total_pages=0,
+                    processed_pages=0,
+                    results=[],
+                    total_processing_time=total_processing_time,
+                    pdf_processing_time=0.0,
+                    ocr_processing_time=0.0,
+                    llm_processing_time=0.0,
+                    dpi_used=request.dpi,
+                    model_used=request.model or settings.OCR_LLM_MODEL,
+                    prompt_used=request.prompt or settings.OCR_LLM_DEFAULT_PROMPT
+                )
+
+    # --- STREAMING HELPER METHODS ---
+
+    async def _process_images_with_streaming(
+        self, 
+        image_paths: List[Path], 
+        request: PDFOCRRequest,
+        task_id: str,
+        progress_queue: asyncio.Queue,
+        start_time: float
+    ) -> tuple[List[PDFPageResult], List[PDFPageStreamResult]]:
+        """
+        Process images with real-time streaming updates.
+        
+        Args:
+            image_paths: List of image file paths
+            request: PDF OCR processing parameters
+            task_id: Unique task identifier
+            progress_queue: Queue for streaming updates
+            start_time: Processing start time
+            
+        Returns:
+            Tuple of (traditional results, streaming results)
+        """
+        traditional_results = []
+        streaming_results = []
+        
+        # Convert PDF request to OCR request
+        ocr_request = OCRRequest(
+            threshold=request.threshold,
+            contrast_level=request.contrast_level
+        )
+        
+        # Process pages one by one for streaming
+        for page_num, image_path in enumerate(image_paths, 1):
+            page_start_time = time.time()
+            
+            try:
+                logger.debug(f"Processing page {page_num} with streaming: {image_path}")
+                
+                # Process single page
+                result = await external_ocr_service.process_image(image_path, ocr_request)
+                page_processing_time = time.time() - page_start_time
+                
+                # Create traditional result
+                if result.success:
+                    traditional_result = PDFPageResult(
+                        page_number=page_num,
+                        extracted_text=result.extracted_text,
+                        processing_time=page_processing_time,
+                        success=True,
+                        error_message=None,
+                        threshold_used=result.threshold_used,
+                        contrast_level_used=result.contrast_level_used
+                    )
+                else:
+                    traditional_result = PDFPageResult(
+                        page_number=page_num,
+                        extracted_text="",
+                        processing_time=page_processing_time,
+                        success=False,
+                        error_message="OCR processing failed",
+                        threshold_used=result.threshold_used,
+                        contrast_level_used=result.contrast_level_used
+                    )
+                
+                traditional_results.append(traditional_result)
+                
+                # Create streaming result
+                stream_result = PDFPageStreamResult(
+                    page_number=page_num,
+                    extracted_text=result.extracted_text if result.success else "",
+                    processing_time=page_processing_time,
+                    success=result.success,
+                    error_message=None if result.success else "OCR processing failed",
+                    threshold_used=result.threshold_used,
+                    contrast_level_used=result.contrast_level_used,
+                    timestamp=datetime.utcnow()
+                )
+                
+                streaming_results.append(stream_result)
+                
+                # Calculate progress metrics
+                processed_pages = len(streaming_results)
+                total_pages = len(image_paths)
+                elapsed_time = time.time() - start_time
+                processing_speed = processed_pages / elapsed_time if elapsed_time > 0 else 0.0
+                estimated_remaining = ((total_pages - processed_pages) / processing_speed) if processing_speed > 0 else None
+                
+                # Send streaming update with BOTH formats
+                await self._send_streaming_update(
+                    progress_queue,
+                    PDFStreamingStatus(
+                        task_id=task_id,
+                        status="page_completed",
+                        current_page=page_num,
+                        total_pages=total_pages,
+                        processed_pages=processed_pages,
+                        failed_pages=processed_pages - sum(1 for r in streaming_results if r.success),
+                        latest_page_result=stream_result,  # Type 1: Single page result
+                        cumulative_results=streaming_results.copy(),  # Type 2: All results
+                        progress_percentage=(processed_pages / total_pages) * 100,
+                        estimated_time_remaining=estimated_remaining,
+                        processing_speed=processing_speed,
+                        error_message=None,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                logger.debug(f"Page {page_num} processed successfully in {page_processing_time:.2f}s")
+                
+            except Exception as e:
+                page_processing_time = time.time() - page_start_time
+                logger.error(f"Page {page_num} processing failed: {str(e)}")
+                
+                # Create failed traditional result
+                traditional_result = PDFPageResult(
+                    page_number=page_num,
+                    extracted_text="",
+                    processing_time=page_processing_time,
+                    success=False,
+                    error_message=str(e),
+                    threshold_used=request.threshold,
+                    contrast_level_used=request.contrast_level
+                )
+                
+                traditional_results.append(traditional_result)
+                
+                # Create failed streaming result
+                stream_result = PDFPageStreamResult(
+                    page_number=page_num,
+                    extracted_text="",
+                    processing_time=page_processing_time,
+                    success=False,
+                    error_message=str(e),
+                    threshold_used=request.threshold,
+                    contrast_level_used=request.contrast_level,
+                    timestamp=datetime.utcnow()
+                )
+                
+                streaming_results.append(stream_result)
+                
+                # Send error update
+                processed_pages = len(streaming_results)
+                total_pages = len(image_paths)
+                elapsed_time = time.time() - start_time
+                processing_speed = processed_pages / elapsed_time if elapsed_time > 0 else 0.0
+                
+                await self._send_streaming_update(
+                    progress_queue,
+                    PDFStreamingStatus(
+                        task_id=task_id,
+                        status="page_completed",
+                        current_page=page_num,
+                        total_pages=total_pages,
+                        processed_pages=processed_pages,
+                        failed_pages=processed_pages - sum(1 for r in streaming_results if r.success),
+                        latest_page_result=stream_result,
+                        cumulative_results=streaming_results.copy(),
+                        progress_percentage=(processed_pages / total_pages) * 100,
+                        estimated_time_remaining=None,
+                        processing_speed=processing_speed,
+                        error_message=f"Page {page_num} failed: {str(e)}",
+                        timestamp=datetime.utcnow()
+                    )
+                )
+        
+        return traditional_results, streaming_results
+
+    async def _process_images_with_llm_streaming(
+        self, 
+        image_paths: List[Path], 
+        request: PDFLLMOCRRequest,
+        task_id: str,
+        progress_queue: asyncio.Queue,
+        start_time: float
+    ) -> tuple[List[PDFPageLLMResult], List[PDFPageLLMStreamResult]]:
+        """
+        Process images with LLM enhancement and real-time streaming updates.
+        
+        Args:
+            image_paths: List of image file paths
+            request: PDF LLM OCR processing parameters
+            task_id: Unique task identifier
+            progress_queue: Queue for streaming updates
+            start_time: Processing start time
+            
+        Returns:
+            Tuple of (traditional results, streaming results)
+        """
+        traditional_results = []
+        streaming_results = []
+        
+        # Convert PDF request to OCR LLM request
+        ocr_llm_request = OCRLLMRequest(
+            threshold=request.threshold,
+            contrast_level=request.contrast_level,
+            prompt=request.prompt,
+            model=request.model
+        )
+        
+        # Process pages one by one for streaming
+        for page_num, image_path in enumerate(image_paths, 1):
+            page_start_time = time.time()
+            
+            try:
+                logger.debug(f"Processing page {page_num} with LLM streaming: {image_path}")
+                
+                # Process single page with LLM
+                result = await self._process_single_image_with_llm(image_path, page_num, ocr_llm_request)
+                page_processing_time = time.time() - page_start_time
+                
+                traditional_results.append(result)
+                
+                # Create streaming result
+                stream_result = PDFPageLLMStreamResult(
+                    page_number=page_num,
+                    extracted_text=result.extracted_text,
+                    original_ocr_text=result.original_ocr_text,
+                    processing_time=result.processing_time,
+                    ocr_processing_time=result.ocr_processing_time,
+                    llm_processing_time=result.llm_processing_time,
+                    success=result.success,
+                    error_message=result.error_message,
+                    threshold_used=result.threshold_used,
+                    contrast_level_used=result.contrast_level_used,
+                    model_used=result.model_used,
+                    prompt_used=result.prompt_used,
+                    timestamp=datetime.utcnow()
+                )
+                
+                streaming_results.append(stream_result)
+                
+                # Calculate progress metrics
+                processed_pages = len(streaming_results)
+                total_pages = len(image_paths)
+                elapsed_time = time.time() - start_time
+                processing_speed = processed_pages / elapsed_time if elapsed_time > 0 else 0.0
+                estimated_remaining = ((total_pages - processed_pages) / processing_speed) if processing_speed > 0 else None
+                
+                # Send streaming update with BOTH formats
+                await self._send_llm_streaming_update(
+                    progress_queue,
+                    PDFLLMStreamingStatus(
+                        task_id=task_id,
+                        status="page_completed",
+                        current_page=page_num,
+                        total_pages=total_pages,
+                        processed_pages=processed_pages,
+                        failed_pages=processed_pages - sum(1 for r in streaming_results if r.success),
+                        latest_page_result=stream_result,  # Type 1: Single page result
+                        cumulative_results=streaming_results.copy(),  # Type 2: All results
+                        progress_percentage=(processed_pages / total_pages) * 100,
+                        estimated_time_remaining=estimated_remaining,
+                        processing_speed=processing_speed,
+                        error_message=None,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                
+                logger.debug(f"Page {page_num} LLM processed successfully in {page_processing_time:.2f}s")
+                
+            except Exception as e:
+                page_processing_time = time.time() - page_start_time
+                logger.error(f"Page {page_num} LLM processing failed: {str(e)}")
+                
+                # Create failed traditional result
+                traditional_result = PDFPageLLMResult(
+                    page_number=page_num,
+                    extracted_text="",
+                    original_ocr_text="",
+                    processing_time=page_processing_time,
+                    ocr_processing_time=0.0,
+                    llm_processing_time=0.0,
+                    success=False,
+                    error_message=str(e),
+                    threshold_used=request.threshold,
+                    contrast_level_used=request.contrast_level,
+                    model_used=request.model or settings.OCR_LLM_MODEL,
+                    prompt_used=request.prompt or settings.OCR_LLM_DEFAULT_PROMPT
+                )
+                
+                traditional_results.append(traditional_result)
+                
+                # Create failed streaming result
+                stream_result = PDFPageLLMStreamResult(
+                    page_number=page_num,
+                    extracted_text="",
+                    original_ocr_text="",
+                    processing_time=page_processing_time,
+                    ocr_processing_time=0.0,
+                    llm_processing_time=0.0,
+                    success=False,
+                    error_message=str(e),
+                    threshold_used=request.threshold,
+                    contrast_level_used=request.contrast_level,
+                    model_used=request.model or settings.OCR_LLM_MODEL,
+                    prompt_used=request.prompt or settings.OCR_LLM_DEFAULT_PROMPT,
+                    timestamp=datetime.utcnow()
+                )
+                
+                streaming_results.append(stream_result)
+                
+                # Send error update
+                processed_pages = len(streaming_results)
+                total_pages = len(image_paths)
+                elapsed_time = time.time() - start_time
+                processing_speed = processed_pages / elapsed_time if elapsed_time > 0 else 0.0
+                
+                await self._send_llm_streaming_update(
+                    progress_queue,
+                    PDFLLMStreamingStatus(
+                        task_id=task_id,
+                        status="page_completed",
+                        current_page=page_num,
+                        total_pages=total_pages,
+                        processed_pages=processed_pages,
+                        failed_pages=processed_pages - sum(1 for r in streaming_results if r.success),
+                        latest_page_result=stream_result,
+                        cumulative_results=streaming_results.copy(),
+                        progress_percentage=(processed_pages / total_pages) * 100,
+                        estimated_time_remaining=None,
+                        processing_speed=processing_speed,
+                        error_message=f"Page {page_num} failed: {str(e)}",
+                        timestamp=datetime.utcnow()
+                    )
+                )
+        
+        return traditional_results, streaming_results
+
+    async def _send_streaming_update(
+        self, 
+        progress_queue: asyncio.Queue, 
+        status: PDFStreamingStatus
+    ) -> None:
+        """
+        Send streaming update to queue safely.
+        
+        Args:
+            progress_queue: Queue for streaming updates
+            status: Status update to send
+        """
+        try:
+            await progress_queue.put(status)
+            logger.debug(f"Sent streaming update: {status.status} - Page {status.current_page}/{status.total_pages}")
+        except Exception as e:
+            logger.error(f"Failed to send streaming update: {str(e)}")
+
+    async def _send_llm_streaming_update(
+        self, 
+        progress_queue: asyncio.Queue, 
+        status: PDFLLMStreamingStatus
+    ) -> None:
+        """
+        Send LLM streaming update to queue safely.
+        
+        Args:
+            progress_queue: Queue for streaming updates
+            status: LLM status update to send
+        """
+        try:
+            await progress_queue.put(status)
+            logger.debug(f"Sent LLM streaming update: {status.status} - Page {status.current_page}/{status.total_pages}")
+        except Exception as e:
+            logger.error(f"Failed to send LLM streaming update: {str(e)}")
 
 
 # Global PDF OCR service instance

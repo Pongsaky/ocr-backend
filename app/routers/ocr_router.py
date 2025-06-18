@@ -5,6 +5,7 @@ OCR router for API endpoints.
 from typing import Dict, List, Any
 
 from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 
@@ -881,4 +882,206 @@ async def get_service_info():
         }
     }
     
-    return service_info 
+    return service_info
+
+
+# --- STREAMING ENDPOINTS ---
+
+@router.post(
+    "/ocr/process-pdf-stream",
+    response_model=PDFOCRResponse,
+    summary="Process PDF for OCR with Streaming (Async)",
+    description="Upload a PDF file for asynchronous OCR processing with real-time streaming updates. Returns a task ID that can be used to connect to the streaming endpoint.",
+    responses={
+        200: {"description": "PDF OCR streaming task created successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large or too many pages"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_pdf_stream_async(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="PDF file to process (max 10 pages)"),
+    request: Request = None
+):
+    """
+    Process a PDF file for OCR with streaming support.
+    
+    Args:
+        request: JSON string containing PDF OCR parameters
+        file: Uploaded PDF file
+        
+    Returns:
+        PDFOCRResponse: Task information with unique ID for streaming
+    """
+    import json
+    
+    try:
+        # Parse PDF OCR request or use defaults if empty
+        if request_data:
+            pdf_request = PDFOCRRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            pdf_request = PDFOCRRequest()
+        
+        logger.info(
+            f"Received streaming PDF OCR request for {file.filename} "
+            f"with threshold: {pdf_request.threshold}, contrast: {pdf_request.contrast_level}, "
+            f"dpi: {pdf_request.dpi}"
+        )
+        
+        # Process PDF with streaming
+        response = await ocr_controller.process_pdf_with_streaming(file, pdf_request)
+        
+        return response
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"Streaming PDF OCR processing request failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Streaming processing failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/ocr/process-pdf-with-llm-stream",
+    response_model=PDFLLMOCRResponse,
+    summary="Process PDF for LLM-enhanced OCR with Streaming (Async)",
+    description="Upload a PDF file for asynchronous LLM-enhanced OCR processing with real-time streaming updates. Returns a task ID that can be used to connect to the streaming endpoint.",
+    responses={
+        200: {"description": "PDF LLM OCR streaming task created successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large or too many pages"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def process_pdf_with_llm_stream_async(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="PDF file to process (max 10 pages)"),
+    request: Request = None
+):
+    """
+    Process a PDF file for LLM-enhanced OCR with streaming support.
+    
+    Args:
+        request: JSON string containing PDF LLM OCR parameters
+        file: Uploaded PDF file
+        
+    Returns:
+        PDFLLMOCRResponse: Task information with unique ID for streaming
+    """
+    import json
+    
+    try:
+        # Parse PDF LLM OCR request or use defaults if empty
+        if request_data:
+            pdf_llm_request = PDFLLMOCRRequest.parse_raw(request_data)
+        else:
+            # Use default values when request is empty
+            pdf_llm_request = PDFLLMOCRRequest()
+        
+        logger.info(
+            f"Received streaming PDF LLM OCR request for {file.filename} "
+            f"with threshold: {pdf_llm_request.threshold}, contrast: {pdf_llm_request.contrast_level}, "
+            f"dpi: {pdf_llm_request.dpi}, prompt: {pdf_llm_request.prompt}, model: {pdf_llm_request.model}"
+        )
+        
+        # Process PDF with LLM and streaming
+        response = await ocr_controller.process_pdf_with_llm_streaming(file, pdf_llm_request)
+        
+        return response
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"Streaming PDF LLM OCR processing request failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Streaming LLM processing failed: {str(e)}"
+        )
+
+
+@router.get(
+    "/ocr/stream/{task_id}",
+    summary="Stream PDF processing progress",
+    description="Connect to real-time streaming updates for PDF processing. Uses Server-Sent Events (SSE) to provide live progress updates.",
+    responses={
+        200: {"description": "Streaming connection established", "content": {"text/event-stream": {}}},
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
+    }
+)
+@limiter.limit("10/minute")  # Lower rate limit for streaming connections
+async def stream_pdf_progress(request: Request, task_id: str):
+    """
+    Stream real-time progress updates for PDF processing.
+    
+    This endpoint provides Server-Sent Events (SSE) for monitoring PDF processing progress.
+    It provides both incremental updates (latest_page_result) and complete state (cumulative_results).
+    
+    Args:
+        task_id: Unique task identifier from the streaming processing request
+        
+    Returns:
+        StreamingResponse: Server-Sent Events stream with progress updates
+        
+    Example stream data formats:
+        ```
+        // Type 1: Page completion update
+        data: {
+            "task_id": "12345...",
+            "status": "page_completed",
+            "current_page": 2,
+            "total_pages": 5,
+            "processed_pages": 2,
+            "latest_page_result": { ... },      // Single page result
+            "cumulative_results": [ ... ],      // All pages processed so far
+            "progress_percentage": 40.0,
+            "estimated_time_remaining": 6.3,
+            "processing_speed": 0.48
+        }
+        
+        // Type 2: Final completion
+        data: {
+            "task_id": "12345...",
+            "status": "completed",
+            "current_page": 5,
+            "total_pages": 5,
+            "processed_pages": 5,
+            "cumulative_results": [ ... ],      // All final results
+            "progress_percentage": 100.0
+        }
+        ```
+    """
+    try:
+        logger.debug(f"Starting stream connection for task {task_id}")
+        
+        # Create streaming response
+        return StreamingResponse(
+            ocr_controller.stream_pdf_progress(task_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Allow-Methods": "GET"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to start stream for task {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start streaming connection: {str(e)}"
+        ) 
