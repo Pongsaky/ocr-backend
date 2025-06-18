@@ -50,3 +50,12 @@ site/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Timestamped data directories (exclude from version control)
+data/
+!data/.gitkeep
+
+# Temporary files and uploads
+uploads/
+results/
+tmp/

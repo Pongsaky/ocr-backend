@@ -158,21 +158,101 @@ The API will be available at:
 
 ### Docker Deployment
 
-For containerized deployment with proper temp file handling:
+#### 🔄 **Timestamped Launch (Recommended)**
+
+For isolated data storage per deployment with automatic timestamp-based directories:
 
 ```bash
-# Build and run with Docker Compose
-docker-compose up --build
+# Launch with timestamped volumes (creates unique directories per launch)
+./scripts/launch_with_timestamp.sh
 
-# Or build and run manually
+# Or using the Python script
+python scripts/start_server.py start-timestamp
+```
+
+This creates a unique data directory structure like:
+```
+data/
+├── 20241201_143022/        # Timestamp: YYYYMMDD_HHMMSS
+│   ├── uploads/
+│   ├── results/
+│   ├── tmp/
+│   ├── logs/
+│   └── launch_info.json    # Launch metadata
+└── 20241201_150315/        # Next launch
+    ├── uploads/
+    └── ...
+```
+
+#### 📁 **Manage Data Directories**
+
+```bash
+# List all timestamped launches
+python scripts/manage_data_dirs.py list
+
+# Show detailed information
+python scripts/manage_data_dirs.py list --verbose
+
+# Clean up old directories (older than 7 days)
+python scripts/manage_data_dirs.py cleanup --days 7
+
+# Dry run to see what would be removed
+python scripts/manage_data_dirs.py cleanup --days 7 --dry-run
+
+# Archive a specific launch
+python scripts/manage_data_dirs.py archive 20241201_143022
+
+# Show disk usage summary
+python scripts/manage_data_dirs.py usage
+```
+
+#### 🔧 **Traditional Launch**
+
+For development or when you want to reuse the same directories:
+
+```bash
+# Regular launch (uses data/default/ directory)
+python scripts/start_server.py start
+
+# Or traditional docker-compose
+TIMESTAMP=default docker-compose up --build
+```
+
+#### 🐳 **Manual Docker Commands**
+
+```bash
+# Build and run manually with timestamped volumes
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+mkdir -p ./data/${TIMESTAMP}/{uploads,results,tmp,logs}
+
 docker build -t ocr-backend .
 docker run -p 8000:8000 \
-  -v $(pwd)/uploads:/app/uploads \
-  -v $(pwd)/results:/app/results \
-  -v $(pwd)/tmp:/app/tmp \
-  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/data/${TIMESTAMP}/uploads:/app/uploads \
+  -v $(pwd)/data/${TIMESTAMP}/results:/app/results \
+  -v $(pwd)/data/${TIMESTAMP}/tmp:/app/tmp \
+  -v $(pwd)/data/${TIMESTAMP}/logs:/app/logs \
   ocr-backend
 ```
+
+#### 🛑 **Service Management**
+
+```bash
+# Stop services
+python scripts/start_server.py stop
+
+# Check service status
+python scripts/start_server.py status
+
+# View logs
+docker-compose logs -f ocr-backend
+```
+
+**Benefits of Timestamped Launches:**
+- ✅ **Isolated data** per deployment
+- ✅ **Easy debugging** - each launch has its own logs
+- ✅ **No data mixing** between different runs
+- ✅ **Automatic cleanup** tools included
+- ✅ **Archive capability** for important runs
 
 **Important**: The Docker setup ensures all temporary files are stored within the project directory structure, preventing the system temp directory issues mentioned in development.
 
