@@ -184,6 +184,33 @@ data/
     └── ...
 ```
 
+#### 🏭 **Production Deployment (Enterprise)**
+
+For **production deployment without source code** on the production server:
+
+```bash
+# Step 1: Build and push image (CI/CD server)
+./scripts/build_and_push.sh -r your-registry.com -t v1.0.0 -p
+
+# Step 2: Deploy on production server (no source code needed)
+curl -O https://raw.githubusercontent.com/your-repo/ocr-backend/main/docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/your-repo/ocr-backend/main/production.env.example
+curl -O https://raw.githubusercontent.com/your-repo/ocr-backend/main/scripts/deploy_production.sh
+
+chmod +x deploy_production.sh
+./deploy_production.sh setup
+./deploy_production.sh deploy -e .env.production
+```
+
+**Production Benefits:**
+- ✅ **No source code** required on production server
+- ✅ **Configurable host paths** for data storage (`/opt/ocr-backend/data`)
+- ✅ **True containerized** deployment
+- ✅ **Enterprise-ready** scaling and monitoring
+- ✅ **Automated setup** and management scripts
+
+See [**Production Deployment Guide**](docs/PRODUCTION_DEPLOYMENT_GUIDE.md) for complete instructions.
+
 #### 📁 **Manage Data Directories**
 
 ```bash

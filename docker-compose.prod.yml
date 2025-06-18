@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  ocr-backend:
+    image: ${OCR_IMAGE_NAME:-ocr-backend:latest}
+    container_name: ocr-backend-prod
+    restart: unless-stopped
+    ports:
+      - "${OCR_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TEMP_DIR=/app/tmp
+      - UPLOAD_DIR=/app/uploads
+      - RESULTS_DIR=/app/results
+      - LOGS_DIR=/app/logs
+    volumes:
+      # Production volume mounts with configurable host paths
+      # Supports both fixed and timestamped deployments
+      - ${HOST_DATA_DIR}/${TIMESTAMP:-default}/uploads:/app/uploads
+      - ${HOST_DATA_DIR}/${TIMESTAMP:-default}/results:/app/results
+      - ${HOST_DATA_DIR}/${TIMESTAMP:-default}/tmp:/app/tmp
+      - ${HOST_LOGS_DIR:-${HOST_DATA_DIR}}/${TIMESTAMP:-default}/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ocr-network
+    # Security: Run as non-root user
+    user: "1000:1000"
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: ocr-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ${NGINX_CONFIG_PATH:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
+      - ${SSL_CERT_PATH:-./nginx/certs}:/etc/nginx/certs:ro
+    depends_on:
+      - ocr-backend
+    networks:
+      - ocr-network
+    profiles:
+      - nginx
+
+networks:
+  ocr-network:
+    driver: bridge
+
+# Production volume definitions (optional for named volumes)
+volumes:
+  ocr_data:
+    driver: local
+  ocr_logs:
+    driver: local 
