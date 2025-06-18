@@ -229,8 +229,10 @@ class PDFOCRService:
             doc = fitz.open(pdf_path)
             context.pdf_document = doc
             
-            # Create temporary directory
-            temp_dir = Path(tempfile.mkdtemp(prefix="pdf_ocr_"))
+            # Create temporary directory within project
+            import uuid
+            temp_dir = Path(settings.TEMP_DIR) / f"pdf_ocr_{uuid.uuid4().hex[:8]}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
             context.add_temp_file(temp_dir)
             
             # Convert each page to image

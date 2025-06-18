@@ -14,8 +14,9 @@ from slowapi.util import get_remote_address
 
 # --- Core Application Imports ---
 from config.settings import get_settings
-from app.logger_config import setup_logger
+from app.logger_config import setup_logger, set_request_id
 from app.middleware.error_handler import register_error_handlers
+from app.middleware.request_id import RequestIDMiddleware
 
 # --- Router Imports ---
 from app.routers import ocr_router
@@ -60,11 +61,16 @@ app.add_middleware(SlowAPIMiddleware)
 # --- Register Custom Error Handlers and Middleware ---
 register_error_handlers(app)
 
+# --- Add Request ID Middleware ---
+logger.info("Adding request ID middleware...")
+app.add_middleware(RequestIDMiddleware)
+
 # --- Create required directories ---
 def create_directories():
     """Create required directories for file storage."""
     Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.TEMP_DIR).mkdir(parents=True, exist_ok=True)
     Path("logs").mkdir(parents=True, exist_ok=True)
     logger.info("Required directories created/verified")
 

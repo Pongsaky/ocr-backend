@@ -122,6 +122,7 @@ ALLOWED_PDF_EXTENSIONS=["pdf"]
 # File Storage Settings
 UPLOAD_DIR=./uploads
 RESULTS_DIR=./results
+TEMP_DIR=./tmp                   # Project-relative temporary files directory
 MAX_FILE_SIZE=10485760
 
 # Processing Settings
@@ -154,6 +155,60 @@ The API will be available at:
 - **API**: http://localhost:8000
 - **Documentation**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
+
+### Docker Deployment
+
+For containerized deployment with proper temp file handling:
+
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or build and run manually
+docker build -t ocr-backend .
+docker run -p 8000:8000 \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/results:/app/results \
+  -v $(pwd)/tmp:/app/tmp \
+  -v $(pwd)/logs:/app/logs \
+  ocr-backend
+```
+
+**Important**: The Docker setup ensures all temporary files are stored within the project directory structure, preventing the system temp directory issues mentioned in development.
+
+## 📋 **Enhanced Logging System**
+
+The API now features a **production-grade logging system** with advanced capabilities:
+
+### 🚀 **Key Improvements**
+- **Function names & line numbers** for precise debugging
+- **Request ID tracking** across the entire request lifecycle  
+- **100MB log files** with **30 backup files** (3GB total, ~30-60 days retention)
+- **Automatic compression** of rotated logs (80% space savings)
+- **Async logging** prevents I/O blocking during high load
+- **Sensitive data sanitization** (API keys, base64 images automatically masked)
+- **Performance metrics** built into log messages
+
+### 📊 **Enhanced Log Format**
+```bash
+# Before: Basic format
+2025-06-18 12:09:01 - app.main - INFO - Application startup initiated...
+
+# After: Enhanced format with debugging info
+2025-06-18 12:09:01.123 - app.main:startup_event:45 - INFO - [req-abc-123] Application startup initiated...
+```
+
+### ⚙️ **Configuration**
+To enable enhanced logging, add these settings to your `.env` file:
+```bash
+LOG_MAX_SIZE=104857600        # 100MB per file
+LOG_BACKUP_COUNT=30           # 30 backups (3GB total)
+LOG_ENABLE_COMPRESSION=True   # Compress old logs
+LOG_ASYNC_ENABLED=True        # Non-blocking I/O
+LOG_SANITIZE_SENSITIVE=True   # Remove sensitive data
+```
+
+📖 **Complete documentation**: [`docs/ENHANCED_LOGGING_GUIDE.md`](docs/ENHANCED_LOGGING_GUIDE.md)
 
 ## 📖 Documentation
 

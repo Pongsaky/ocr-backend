@@ -316,7 +316,11 @@ def validate_and_scale_image(
     
     # Create output path if not provided
     if output_path is None:
-        output_path = input_path.parent / f"scaled_{input_path.name}"
+        from pathlib import Path
+        import uuid
+        temp_dir = Path(settings.TEMP_DIR) / f"img_scaling_{uuid.uuid4().hex[:8]}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        output_path = temp_dir / f"scaled_{input_path.name}"
     
     # Scale image
     success, metadata = scale_image_to_threshold(input_path, output_path, max_pixels)

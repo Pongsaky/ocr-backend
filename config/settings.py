@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     # --- File Storage Settings ---
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     RESULTS_DIR: str = os.getenv("RESULTS_DIR", "./results")
+    TEMP_DIR: str = os.getenv("TEMP_DIR", "./tmp")  # Project-relative temp directory
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
 
     # --- Processing Settings ---
@@ -96,11 +97,18 @@ class Settings(BaseSettings):
     # --- Logging Settings ---
     LOG_FORMAT: str = os.getenv(
         "LOG_FORMAT", 
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        "%(asctime)s.%(msecs)03d - %(name)s:%(funcName)s:%(lineno)d - %(levelname)s - [%(request_id)s] %(message)s"
     )
+    LOG_DATE_FORMAT: str = os.getenv("LOG_DATE_FORMAT", "%Y-%m-%d %H:%M:%S")
     LOG_FILE: str = os.getenv("LOG_FILE", "./logs/ocr-backend.log")
-    LOG_MAX_SIZE: int = int(os.getenv("LOG_MAX_SIZE", "10485760"))  # 10MB
-    LOG_BACKUP_COUNT: int = int(os.getenv("LOG_BACKUP_COUNT", "5"))
+    LOG_MAX_SIZE: int = int(os.getenv("LOG_MAX_SIZE", "104857600"))  # 100MB
+    LOG_BACKUP_COUNT: int = int(os.getenv("LOG_BACKUP_COUNT", "30"))  # 30 backups (3GB total)
+    
+    # Enhanced logging features
+    LOG_ENABLE_COMPRESSION: bool = os.getenv("LOG_ENABLE_COMPRESSION", "True").lower() in ("true", "1", "t")
+    LOG_ASYNC_ENABLED: bool = os.getenv("LOG_ASYNC_ENABLED", "True").lower() in ("true", "1", "t")
+    LOG_SANITIZE_SENSITIVE: bool = os.getenv("LOG_SANITIZE_SENSITIVE", "True").lower() in ("true", "1", "t")
+    LOG_QUEUE_SIZE: int = int(os.getenv("LOG_QUEUE_SIZE", "10000"))  # Async log queue size
 
     class Config:
         """Pydantic model configuration."""

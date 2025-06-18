@@ -74,7 +74,9 @@ class ExternalOCRService:
             # Validate and scale image if necessary
             try:
                 # Create temp file for scaled image if needed
-                temp_dir = Path(tempfile.mkdtemp(prefix="ocr_scaling_"))
+                import uuid
+                temp_dir = Path(settings.TEMP_DIR) / f"ocr_scaling_{uuid.uuid4().hex[:8]}"
+                temp_dir.mkdir(parents=True, exist_ok=True)
                 temp_files.append(temp_dir)
                 
                 scaled_image_path = temp_dir / f"scaled_{image_path.name}"
