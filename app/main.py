@@ -35,7 +35,8 @@ app = FastAPI(
     debug=settings.DEBUG,
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    root_path="/ocr-backend"
 )
 
 # --- Configure CORS ---
