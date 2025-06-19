@@ -5,9 +5,10 @@ Application configuration settings for OCR Backend API.
 import os
 import json
 from functools import lru_cache
-from typing import List, Union
+from typing import List, Union, Optional
 
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if it exists
@@ -52,6 +53,7 @@ class Settings(BaseSettings):
     OCR_LLM_TIMEOUT: int = int(os.getenv("OCR_LLM_TIMEOUT", "60"))
     OCR_LLM_MODEL: str = os.getenv("OCR_LLM_MODEL", "nectec/Pathumma-vision-ocr-lora-dev")
     OCR_LLM_DEFAULT_PROMPT: str = os.getenv("OCR_LLM_DEFAULT_PROMPT", "ข้อความในภาพนี้")
+    OCR_LLM_API_KEY: Optional[str] = os.getenv("OCR_LLM_API_KEY", None)  # Optional API key
     
     # --- OCR Processing Settings ---
     DEFAULT_THRESHOLD: int = int(os.getenv("DEFAULT_THRESHOLD", "500"))
@@ -110,9 +112,7 @@ class Settings(BaseSettings):
     LOG_SANITIZE_SENSITIVE: bool = os.getenv("LOG_SANITIZE_SENSITIVE", "True").lower() in ("true", "1", "t")
     LOG_QUEUE_SIZE: int = int(os.getenv("LOG_QUEUE_SIZE", "10000"))  # Async log queue size
 
-    class Config:
-        """Pydantic model configuration."""
-        case_sensitive = True
+    model_config = ConfigDict(case_sensitive=True)
 
 
 @lru_cache()

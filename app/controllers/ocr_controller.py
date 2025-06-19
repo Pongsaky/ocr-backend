@@ -19,6 +19,7 @@ from app.models.ocr_models import (
     OCRLLMRequest, OCRLLMResponse, OCRLLMResult,
     PDFOCRRequest, PDFOCRResponse, PDFOCRResult,
     PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult,
+    ImagePreprocessResult, ImagePreprocessResponse,
     CancelTaskRequest, CancelTaskResponse, TaskCancellationError, TaskStatus
 )
 from app.services.external_ocr_service import external_ocr_service
@@ -40,6 +41,7 @@ class OCRController:
         self.llm_tasks: Dict[str, OCRLLMResponse] = {}
         self.pdf_tasks: Dict[str, PDFOCRResponse] = {}
         self.pdf_llm_tasks: Dict[str, PDFLLMOCRResponse] = {}
+        self.preprocess_tasks: Dict[str, ImagePreprocessResponse] = {}
         # New streaming queues for real-time updates
         self.streaming_queues: Dict[str, asyncio.Queue] = {}
         # Task cancellation tracking
@@ -597,6 +599,182 @@ class OCRController:
                 logger.debug(f"Cleaned up temporary file: {file_path}")
         except Exception as e:
             logger.warning(f"Failed to cleanup file {file_path}: {str(e)}")
+    
+    # --- Image Preprocessing Methods ---
+    
+    async def preprocess_image(
+        self, 
+        file: UploadFile, 
+        ocr_request: OCRRequest
+    ) -> ImagePreprocessResponse:
+        """
+        Process uploaded image for preprocessing only (testing endpoint).
+        
+        Args:
+            file: Uploaded image file
+            ocr_request: Image processing parameters
+            
+        Returns:
+            ImagePreprocessResponse: Processing response with task ID
+            
+        Raises:
+            HTTPException: If file validation fails
+        """
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        created_at = datetime.now(UTC)
+        
+        logger.info(f"Starting image preprocessing task {task_id} for file {file.filename}")
+        
+        try:
+            # Validate file
+            await self._validate_upload_file(file)
+            
+            # Save uploaded file
+            image_path = await self._save_uploaded_file(file, task_id)
+            
+            # Process immediately (synchronous for testing)
+            result = await self._preprocess_image_sync(image_path, ocr_request)
+            
+            # Cleanup temporary file
+            await self._cleanup_file(image_path)
+            
+            # Create response
+            response = ImagePreprocessResponse(
+                task_id=task_id,
+                status="completed" if result.success else "failed",
+                result=result if result.success else None,
+                error_message=None if result.success else "Preprocessing failed",
+                created_at=created_at,
+                completed_at=datetime.now(UTC)
+            )
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Image preprocessing task {task_id} failed: {str(e)}")
+            
+            # Try to cleanup file if it exists
+            try:
+                if 'image_path' in locals():
+                    await self._cleanup_file(image_path)
+            except:
+                pass
+            
+            # Return error response
+            return ImagePreprocessResponse(
+                task_id=task_id,
+                status="failed",
+                result=None,
+                error_message=str(e),
+                created_at=created_at,
+                completed_at=datetime.now(UTC)
+            )
+    
+    async def _preprocess_image_sync(
+        self, 
+        image_path: Path, 
+        ocr_request: OCRRequest
+    ) -> ImagePreprocessResult:
+        """
+        Process image with external preprocessing service only.
+        
+        Args:
+            image_path: Path to the image file
+            ocr_request: Image processing parameters
+            
+        Returns:
+            ImagePreprocessResult: Preprocessing result with original and processed images
+        """
+        try:
+            logger.info(f"Starting image preprocessing for {image_path}")
+            
+            # Get original image as base64 for comparison
+            original_image_base64 = await self._image_to_base64(image_path)
+            
+            # Process image with external service
+            processed_result = await external_ocr_service.process_image(image_path, ocr_request)
+            
+            if not processed_result.success:
+                return ImagePreprocessResult(
+                    success=False,
+                    processed_image_base64="",
+                    original_image_base64=original_image_base64,
+                    processing_time=processed_result.processing_time,
+                    threshold_used=processed_result.threshold_used,
+                    contrast_level_used=processed_result.contrast_level_used,
+                    image_metadata={"error": processed_result.error_message}
+                )
+            
+            # Create metadata
+            image_metadata = {
+                "scaling_applied": False,  # This would come from the external service if available
+                "original_size": {"width": 0, "height": 0},  # Could be extracted from PIL
+                "processed_size": {"width": 0, "height": 0},  # Could be extracted from processed image
+                "external_service_used": True,
+                "processing_successful": True
+            }
+            
+            logger.info(f"Image preprocessing completed in {processed_result.processing_time:.2f}s")
+            
+            return ImagePreprocessResult(
+                success=True,
+                processed_image_base64=processed_result.processed_image_base64,
+                original_image_base64=original_image_base64,
+                processing_time=processed_result.processing_time,
+                threshold_used=processed_result.threshold_used,
+                contrast_level_used=processed_result.contrast_level_used,
+                image_metadata=image_metadata
+            )
+            
+        except Exception as e:
+            logger.error(f"Image preprocessing failed: {str(e)}")
+            
+            return ImagePreprocessResult(
+                success=False,
+                processed_image_base64="",
+                original_image_base64="",
+                processing_time=0.0,
+                threshold_used=ocr_request.threshold,
+                contrast_level_used=ocr_request.contrast_level,
+                image_metadata={"error": str(e)}
+            )
+    
+    async def _image_to_base64(self, image_path: Path) -> str:
+        """
+        Convert image file to base64 string.
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            str: Base64 encoded image data
+        """
+        try:
+            from PIL import Image
+            import base64
+            from io import BytesIO
+            
+            # Load and validate image
+            with Image.open(image_path) as img:
+                # Convert to RGB if necessary
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    img = img.convert('RGB')
+                
+                # Save to BytesIO buffer
+                buffer = BytesIO()
+                img.save(buffer, format='JPEG', quality=95)
+                
+                # Encode to base64
+                image_bytes = buffer.getvalue()
+                image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                
+                logger.debug(f"Successfully converted {image_path} to base64")
+                return image_base64
+                
+        except Exception as e:
+            logger.error(f"Failed to convert image to base64: {str(e)}")
+            return ""
     
     # --- PDF Processing Methods ---
     

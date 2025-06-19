@@ -10,7 +10,7 @@ from datetime import datetime, UTC
 from fastapi import UploadFile, HTTPException
 
 from app.controllers.ocr_controller import OCRController
-from app.models.ocr_models import OCRRequest, OCRResponse, OCRResult
+from app.models.ocr_models import OCRRequest, OCRResponse, OCRResult, ImagePreprocessResponse
 
 
 class TestOCRController:
@@ -205,6 +205,42 @@ class TestOCRController:
         # Should not raise any exception
         await ocr_controller._cleanup_file(non_existent_path)
     
+    @pytest.mark.asyncio
+    async def test_preprocess_image_success(self, ocr_controller, mock_upload_file, sample_ocr_request):
+        """Test successful image preprocessing."""
+        from app.services.external_ocr_service import ImageProcessingResult
+        
+        with patch.object(ocr_controller, '_validate_upload_file', new_callable=AsyncMock) as mock_validate, \
+             patch.object(ocr_controller, '_save_uploaded_file', new_callable=AsyncMock) as mock_save, \
+             patch.object(ocr_controller, '_cleanup_file', new_callable=AsyncMock) as mock_cleanup, \
+             patch.object(ocr_controller, '_preprocess_image_sync', new_callable=AsyncMock) as mock_preprocess:
+            
+            mock_save.return_value = Path("/tmp/test_image.jpg")
+            
+            # Mock preprocessing result
+            from app.models.ocr_models import ImagePreprocessResult
+            mock_result = ImagePreprocessResult(
+                success=True,
+                processed_image_base64="processed_base64",
+                original_image_base64="original_base64",
+                processing_time=1.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                image_metadata={"test": "metadata"}
+            )
+            mock_preprocess.return_value = mock_result
+            
+            response = await ocr_controller.preprocess_image(mock_upload_file, sample_ocr_request)
+            
+            assert isinstance(response, ImagePreprocessResponse)
+            assert response.status == "completed"
+            assert response.result is not None
+            assert response.result.success
+            mock_validate.assert_called_once()
+            mock_save.assert_called_once()
+            mock_preprocess.assert_called_once()
+            mock_cleanup.assert_called_once()
+
     @pytest.mark.asyncio
     async def test_list_tasks(self, ocr_controller):
         """Test listing all tasks."""

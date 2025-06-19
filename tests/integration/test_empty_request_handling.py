@@ -241,4 +241,4 @@ class TestEmptyRequestHandling:
         # Check PDF processing defaults
         assert data["pdf_processing"]["threshold"]["default"] == 500
         assert data["pdf_processing"]["dpi"]["default"] == 300
-        assert data["pdf_processing"]["max_pages"] == 10 
+        assert data["pdf_processing"]["max_pages"] == 20  # Using environment variable value 

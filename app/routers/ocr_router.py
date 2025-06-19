@@ -15,6 +15,7 @@ from app.models.ocr_models import (
     OCRLLMRequest, OCRLLMResponse, OCRLLMResult,
     PDFOCRRequest, PDFOCRResponse, PDFOCRResult,
     PDFLLMOCRRequest, PDFLLMOCRResponse, PDFLLMOCRResult,
+    ImagePreprocessResult, ImagePreprocessResponse,
     CancelTaskRequest, CancelTaskResponse
 )
 from app.controllers.ocr_controller import ocr_controller
@@ -63,7 +64,7 @@ async def process_image_async(
     try:
         # Parse OCR request or use defaults if empty
         if request_data:
-            ocr_request = OCRRequest.parse_raw(request_data)
+            ocr_request = OCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             ocr_request = OCRRequest()
@@ -125,7 +126,7 @@ async def process_image_sync(
     try:
         # Parse OCR request or use defaults if empty
         if request_data:
-            ocr_request = OCRRequest.parse_raw(request_data)
+            ocr_request = OCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             ocr_request = OCRRequest()
@@ -150,6 +151,70 @@ async def process_image_sync(
         raise HTTPException(
             status_code=500,
             detail=f"Processing failed: {str(e)}"
+        )
+
+
+# --- Image Preprocessing Endpoint ---
+
+@router.post(
+    "/ocr/preprocess-image",
+    response_model=ImagePreprocessResponse,
+    summary="Preprocess image only (Testing)",
+    description="Upload an image file for external preprocessing only. Returns original and processed images for comparison/testing.",
+    responses={
+        200: {"description": "Image preprocessing completed"},
+        400: {"model": ErrorResponse, "description": "Invalid file or parameters"},
+        413: {"model": ErrorResponse, "description": "File too large"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Processing failed"}
+    }
+)
+@limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
+async def preprocess_image_only(
+    request_data: str = Form(None, alias="request"),
+    file: UploadFile = File(..., description="Image file to preprocess"),
+    request: Request = None
+):
+    """
+    Preprocess an uploaded image using external service only (for testing).
+    
+    Args:
+        request: JSON string containing preprocessing parameters
+        file: Uploaded image file
+        
+    Returns:
+        ImagePreprocessResponse: Preprocessing result with original and processed images
+    """
+    import json
+    
+    try:
+        # Parse preprocessing request or use defaults if empty
+        if request_data:
+            ocr_request = OCRRequest.model_validate_json(request_data)
+        else:
+            # Use default values when request is empty
+            ocr_request = OCRRequest()
+        
+        logger.info(
+            f"Received image preprocessing request for {file.filename} "
+            f"with threshold: {ocr_request.threshold}, contrast: {ocr_request.contrast_level}"
+        )
+        
+        # Process image for preprocessing only
+        response = await ocr_controller.preprocess_image(file, ocr_request)
+        
+        return response
+        
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON in request parameter"
+        )
+    except Exception as e:
+        logger.error(f"Image preprocessing failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Preprocessing failed: {str(e)}"
         )
 
 
@@ -188,7 +253,7 @@ async def process_image_with_llm_async(
     try:
         # Parse OCR LLM request or use defaults if empty
         if request_data:
-            ocr_llm_request = OCRLLMRequest.parse_raw(request_data)
+            ocr_llm_request = OCRLLMRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             ocr_llm_request = OCRLLMRequest()
@@ -251,7 +316,7 @@ async def process_image_with_llm_sync(
     try:
         # Parse OCR LLM request or use defaults if empty
         if request_data:
-            ocr_llm_request = OCRLLMRequest.parse_raw(request_data)
+            ocr_llm_request = OCRLLMRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             ocr_llm_request = OCRLLMRequest()
@@ -676,7 +741,7 @@ async def process_pdf_async(
     try:
         # Parse PDF OCR request or use defaults if empty
         if request_data:
-            pdf_request = PDFOCRRequest.parse_raw(request_data)
+            pdf_request = PDFOCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             pdf_request = PDFOCRRequest()
@@ -738,7 +803,7 @@ async def process_pdf_sync(
     try:
         # Parse PDF OCR request or use defaults if empty
         if request_data:
-            pdf_request = PDFOCRRequest.parse_raw(request_data)
+            pdf_request = PDFOCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             pdf_request = PDFOCRRequest()
@@ -799,7 +864,7 @@ async def process_pdf_with_llm_async(
     try:
         # Parse PDF LLM OCR request or use defaults if empty
         if request_data:
-            pdf_llm_request = PDFLLMOCRRequest.parse_raw(request_data)
+            pdf_llm_request = PDFLLMOCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             pdf_llm_request = PDFLLMOCRRequest()
@@ -862,7 +927,7 @@ async def process_pdf_with_llm_sync(
     try:
         # Parse PDF LLM OCR request or use defaults if empty
         if request_data:
-            pdf_llm_request = PDFLLMOCRRequest.parse_raw(request_data)
+            pdf_llm_request = PDFLLMOCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             pdf_llm_request = PDFLLMOCRRequest()
@@ -1143,7 +1208,7 @@ async def process_pdf_stream_async(
     try:
         # Parse PDF OCR request or use defaults if empty
         if request_data:
-            pdf_request = PDFOCRRequest.parse_raw(request_data)
+            pdf_request = PDFOCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             pdf_request = PDFOCRRequest()
@@ -1205,7 +1270,7 @@ async def process_pdf_with_llm_stream_async(
     try:
         # Parse PDF LLM OCR request or use defaults if empty
         if request_data:
-            pdf_llm_request = PDFLLMOCRRequest.parse_raw(request_data)
+            pdf_llm_request = PDFLLMOCRRequest.model_validate_json(request_data)
         else:
             # Use default values when request is empty
             pdf_llm_request = PDFLLMOCRRequest()

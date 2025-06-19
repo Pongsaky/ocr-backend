@@ -223,6 +223,89 @@ class TestOCRAPIEndpoints:
             assert data["task_id"] == task_id
             assert "status" in data
     
+    def test_preprocess_image_success(self, client, sample_image_file):
+        """Test image preprocessing endpoint success."""
+        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external_process, \
+             patch('app.controllers.ocr_controller.ocr_controller._image_to_base64', new_callable=AsyncMock) as mock_image_to_base64:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            
+            # Mock external service returning processed image
+            mock_external_process.return_value = ImageProcessingResult(
+                success=True,
+                processed_image_base64="fake_base64_processed_image",
+                processing_time=1.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                extracted_text=""
+            )
+            
+            # Mock original image conversion
+            mock_image_to_base64.return_value = "fake_base64_original_image"
+            
+            response = client.post(
+                "/v1/ocr/preprocess-image",
+                files={"file": sample_image_file},
+                data={"request": '{"threshold": 500, "contrast_level": 1.3}'}
+            )
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "completed"
+            assert data["result"] is not None
+            assert data["result"]["success"] is True
+            assert data["result"]["processed_image_base64"] == "fake_base64_processed_image"
+            assert data["result"]["original_image_base64"] == "fake_base64_original_image"
+            assert data["result"]["processing_time"] == 1.5
+            assert data["result"]["threshold_used"] == 500
+            assert data["result"]["contrast_level_used"] == 1.3
+            assert "image_metadata" in data["result"]
+
+    def test_preprocess_image_invalid_file(self, client, invalid_file):
+        """Test image preprocessing with invalid file."""
+        response = client.post(
+            "/v1/ocr/preprocess-image",
+            files={"file": invalid_file},
+            data={"request": '{"threshold": 500, "contrast_level": 1.3}'}
+        )
+        
+        assert response.status_code == 200  # Returns 200 but with error status
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["error_message"] is not None
+
+    def test_preprocess_image_external_service_failure(self, client, sample_image_file):
+        """Test image preprocessing when external service fails."""
+        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external_process, \
+             patch('app.controllers.ocr_controller.ocr_controller._image_to_base64', new_callable=AsyncMock) as mock_image_to_base64:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            
+            # Mock external service failure
+            mock_external_process.return_value = ImageProcessingResult(
+                success=False,
+                processed_image_base64="",
+                processing_time=0.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                error_message="External service unavailable",
+                extracted_text=""
+            )
+            
+            # Mock original image conversion
+            mock_image_to_base64.return_value = "fake_base64_original_image"
+            
+            response = client.post(
+                "/v1/ocr/preprocess-image",
+                files={"file": sample_image_file},
+                data={"request": '{"threshold": 500, "contrast_level": 1.3}'}
+            )
+            
+            assert response.status_code == 200  # Returns 200 but with error status
+            data = response.json()
+            assert data["status"] == "failed"
+            assert data["error_message"] == "Preprocessing failed"
+
     def test_get_task_status_not_found(self, client):
         """Test get task status for non-existent task."""
         response = client.get("/v1/ocr/tasks/non-existent-task-id")

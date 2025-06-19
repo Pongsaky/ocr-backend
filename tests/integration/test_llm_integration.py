@@ -253,7 +253,6 @@ class TestLLMIntegration:
             
             result = await llm_service.process_image_with_llm(
                 test_image_base64,
-                "original text",
                 sample_request,
                 1.0
             )
@@ -284,7 +283,6 @@ class TestLLMIntegration:
         try:
             result = await llm_service.process_image_with_llm(
                 test_image_base64,
-                "original OCR text",
                 custom_request,
                 1.2
             )
@@ -316,7 +314,6 @@ class TestLLMIntegration:
         try:
             result = await llm_service.process_image_with_llm(
                 invalid_base64,
-                "original text",
                 invalid_request, 
                 1.0
             )
@@ -347,7 +344,6 @@ class TestLLMIntegration:
         for i in range(3):  # Small number to avoid overwhelming the API
             task = llm_service.process_image_with_llm(
                 test_image_base64,
-                f"original text {i}",
                 sample_request,
                 1.0
             )
