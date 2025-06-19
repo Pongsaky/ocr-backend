@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, ConfigDict, validator
 
 
 class OCRRequest(BaseModel):
@@ -25,14 +25,12 @@ class OCRRequest(BaseModel):
         description="Contrast level for image enhancement (0.1-5.0)"
     )
     
-    class Config:
-        """Pydantic model configuration."""
-        json_schema_extra = {
-            "example": {
-                "threshold": 500,
-                "contrast_level": 1.3
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "threshold": 500,
+            "contrast_level": 1.3
         }
+    })
 
 
 class ExternalOCRRequest(BaseModel):
@@ -50,17 +48,15 @@ class OCRResult(BaseModel):
     threshold_used: int = Field(description="Threshold value used")
     contrast_level_used: float = Field(description="Contrast level used")
     
-    class Config:
-        """Pydantic model configuration."""
-        json_schema_extra = {
-            "example": {
-                "success": True,
-                "extracted_text": "Sample extracted text from image",
-                "processing_time": 1.23,
-                "threshold_used": 128,
-                "contrast_level_used": 1.0
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "success": True,
+            "extracted_text": "Sample extracted text from image",
+            "processing_time": 1.23,
+            "threshold_used": 128,
+            "contrast_level_used": 1.0
         }
+    })
 
 
 class OCRResponse(BaseModel):
@@ -120,19 +116,17 @@ class ErrorResponse(BaseModel):
         description="Additional error details"
     )
     
-    class Config:
-        """Pydantic model configuration."""
-        json_schema_extra = {
-            "example": {
-                "error": True,
-                "message": "File format not supported",
-                "status_code": 400,
-                "path": "/v1/ocr/process",
-                "details": {
-                    "supported_formats": ["jpg", "png", "bmp", "tiff"]
-                }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "error": True,
+            "message": "File format not supported",
+            "status_code": 400,
+            "path": "/v1/ocr/process",
+            "details": {
+                "supported_formats": ["jpg", "png", "bmp", "tiff"]
             }
         }
+    })
 
 
 class HealthCheckResponse(BaseModel):
@@ -143,17 +137,15 @@ class HealthCheckResponse(BaseModel):
     version: str = Field(description="Service version")
     external_ocr_status: str = Field(description="External OCR service status")
     
-    class Config:
-        """Pydantic model configuration."""
-        json_schema_extra = {
-            "example": {
-                "status": "healthy",
-                "environment": "development",
-                "service": "OCR Backend API",
-                "version": "0.1.0",
-                "external_ocr_status": "available"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "status": "healthy",
+            "environment": "development",
+            "service": "OCR Backend API",
+            "version": "0.1.0",
+            "external_ocr_status": "available"
         }
+    })
 
 
 # --- OCR LLM Models ---
@@ -859,4 +851,79 @@ class TaskCancellationError(Exception):
     def __init__(self, task_id: str, reason: str = "Task was cancelled"):
         self.task_id = task_id
         self.reason = reason
-        super().__init__(f"Task {task_id} was cancelled: {reason}") 
+        super().__init__(f"Task {task_id} was cancelled: {reason}")
+
+
+# --- Image Preprocessing Models ---
+
+class ImagePreprocessResult(BaseModel):
+    """Image preprocessing result model."""
+    success: bool = Field(description="Whether preprocessing was successful")
+    processed_image_base64: str = Field(description="Base64 encoded processed image")
+    original_image_base64: str = Field(description="Base64 encoded original image for comparison")
+    processing_time: float = Field(description="Processing time in seconds")
+    threshold_used: int = Field(description="Threshold value used")
+    contrast_level_used: float = Field(description="Contrast level used")
+    image_metadata: Dict[str, Any] = Field(description="Image processing metadata")
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "processed_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+                "original_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+                "processing_time": 1.23,
+                "threshold_used": 500,
+                "contrast_level_used": 1.3,
+                "image_metadata": {
+                    "scaling_applied": False,
+                    "original_size": {"width": 1920, "height": 1080},
+                    "processed_size": {"width": 1920, "height": 1080}
+                }
+            }
+        }
+
+
+class ImagePreprocessResponse(BaseModel):
+    """Image preprocessing API response model."""
+    task_id: str = Field(description="Unique task identifier")
+    status: str = Field(description="Processing status")
+    result: Optional[ImagePreprocessResult] = Field(
+        default=None,
+        description="Image preprocessing result"
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error message if preprocessing failed"
+    )
+    created_at: datetime = Field(description="Task creation timestamp")
+    completed_at: Optional[datetime] = Field(
+        default=None,
+        description="Task completion timestamp"
+    )
+    
+    class Config:
+        """Pydantic model configuration."""
+        json_schema_extra = {
+            "example": {
+                "task_id": "12345678-1234-1234-1234-123456789012",
+                "status": "completed",
+                "result": {
+                    "success": True,
+                    "processed_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+                    "original_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+                    "processing_time": 1.23,
+                    "threshold_used": 500,
+                    "contrast_level_used": 1.3,
+                    "image_metadata": {
+                        "scaling_applied": False,
+                        "original_size": {"width": 1920, "height": 1080},
+                        "processed_size": {"width": 1920, "height": 1080}
+                    }
+                },
+                "error_message": None,
+                "created_at": "2024-01-15T10:30:00Z",
+                "completed_at": "2024-01-15T10:30:01Z"
+            }
+        } 
