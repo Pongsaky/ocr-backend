@@ -236,7 +236,6 @@ class OCRLLMResult(BaseModel):
     """OCR LLM processing result."""
     success: bool = Field(description="Whether processing was successful")
     extracted_text: str = Field(description="LLM-enhanced extracted text")
-    original_ocr_text: str = Field(description="Original OCR extracted text")
     processing_time: float = Field(description="Total processing time in seconds")
     image_processing_time: float = Field(description="Image processing time in seconds")
     llm_processing_time: float = Field(description="LLM processing time in seconds")
@@ -251,7 +250,6 @@ class OCRLLMResult(BaseModel):
             "example": {
                 "success": True,
                 "extracted_text": "Enhanced and corrected text from LLM",
-                "original_ocr_text": "Original OCR extracted text",
                 "processing_time": 3.45,
                 "image_processing_time": 1.23,
                 "llm_processing_time": 2.22,
@@ -298,7 +296,6 @@ class OCRLLMResponse(BaseModel):
                 "result": {
                     "success": True,
                     "extracted_text": "Enhanced and corrected text from LLM",
-                    "original_ocr_text": "Original OCR extracted text",
                     "processing_time": 3.45,
                     "image_processing_time": 1.23,
                     "llm_processing_time": 2.22,
@@ -510,7 +507,6 @@ class PDFPageLLMResult(BaseModel):
     """LLM-enhanced result for a single PDF page."""
     page_number: int = Field(description="Page number (1-indexed)")
     extracted_text: str = Field(description="LLM-enhanced extracted text from the page")
-    original_ocr_text: str = Field(description="Original OCR text from the page")
     processing_time: float = Field(description="Total processing time for this page")
     image_processing_time: float = Field(description="OCR processing time for this page")
     llm_processing_time: float = Field(description="LLM processing time for this page")
@@ -530,7 +526,6 @@ class PDFPageLLMResult(BaseModel):
             "example": {
                 "page_number": 1,
                 "extracted_text": "Enhanced text from page 1",
-                "original_ocr_text": "Original OCR text from page 1",
                 "processing_time": 3.45,
                 "image_processing_time": 1.23,
                 "llm_processing_time": 2.22,
@@ -550,10 +545,10 @@ class PDFLLMOCRResult(BaseModel):
     total_pages: int = Field(description="Total number of pages in the PDF")
     processed_pages: int = Field(description="Number of pages successfully processed")
     results: List[PDFPageLLMResult] = Field(description="LLM-enhanced results for each page")
-    total_processing_time: float = Field(description="Total processing time in seconds")
+    total_processing_time: float = Field(description="Total wall-clock processing time in seconds")
     pdf_processing_time: float = Field(description="Time spent converting PDF to images")
-    image_processing_time: float = Field(description="Time spent on image processing")
-    llm_processing_time: float = Field(description="Time spent on LLM processing")
+    image_processing_time: float = Field(description="Total time spent on image preprocessing (sum of all pages)")
+    llm_processing_time: float = Field(description="Maximum LLM processing time among all pages (parallel execution)")
     dpi_used: int = Field(description="DPI used for PDF to image conversion")
     model_used: str = Field(description="LLM model used")
     prompt_used: str = Field(description="Prompt used for LLM")
@@ -726,7 +721,6 @@ class PDFPageLLMStreamResult(BaseModel):
     """Streaming result for a single PDF page with LLM enhancement."""
     page_number: int = Field(description="Page number (1-indexed)")
     extracted_text: str = Field(description="LLM-enhanced extracted text from the page")
-    original_ocr_text: str = Field(description="Original OCR text from the page")
     processing_time: float = Field(description="Total processing time for this page")
     image_processing_time: float = Field(description="OCR processing time for this page")
     llm_processing_time: float = Field(description="LLM processing time for this page")
@@ -747,7 +741,6 @@ class PDFPageLLMStreamResult(BaseModel):
             "example": {
                 "page_number": 1,
                 "extracted_text": "LLM-enhanced text from page 1",
-                "original_ocr_text": "Original OCR text from page 1",
                 "processing_time": 4.2,
                 "image_processing_time": 2.1,
                 "llm_processing_time": 2.1,

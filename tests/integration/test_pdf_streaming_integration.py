@@ -182,7 +182,6 @@ class TestPDFStreamingWithRealFile:
         for update in page_updates:
             # Type 1: Single LLM page result
             if update.latest_page_result:
-                assert hasattr(update.latest_page_result, 'original_ocr_text')
                 assert hasattr(update.latest_page_result, 'llm_processing_time')
                 assert hasattr(update.latest_page_result, 'model_used')
                 assert hasattr(update.latest_page_result, 'prompt_used')
@@ -190,7 +189,6 @@ class TestPDFStreamingWithRealFile:
             # Type 2: Cumulative LLM results
             assert isinstance(update.cumulative_results, list)
             for result_item in update.cumulative_results:
-                assert hasattr(result_item, 'original_ocr_text')
                 assert hasattr(result_item, 'llm_processing_time')
         
         print(f"LLM processed {result.total_pages} pages in {processing_time:.2f}s")

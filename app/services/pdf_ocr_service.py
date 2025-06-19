@@ -60,7 +60,7 @@ class PDFProcessingContext:
         """Clean up all tracked resources."""
         cleanup_errors = []
         
-        # Close PDF document
+        # Close PDF document first
         if self.pdf_document:
             try:
                 self.pdf_document.close()
@@ -68,8 +68,21 @@ class PDFProcessingContext:
             except Exception as e:
                 cleanup_errors.append(f"PDF document: {e}")
         
-        # Clean up temporary files
+        # Small delay to ensure file handles are released
+        await asyncio.sleep(0.1)
+        
+        # Clean up temporary files (files first, then directories)
+        files_to_cleanup = []
+        directories_to_cleanup = []
+        
         for temp_file in self.temp_files:
+            if temp_file.is_file():
+                files_to_cleanup.append(temp_file)
+            elif temp_file.is_dir():
+                directories_to_cleanup.append(temp_file)
+        
+        # Clean up files first
+        for temp_file in files_to_cleanup:
             try:
                 if temp_file.exists():
                     temp_file.unlink()
@@ -77,13 +90,33 @@ class PDFProcessingContext:
             except Exception as e:
                 cleanup_errors.append(f"{temp_file}: {e}")
         
+        # Small delay before directory cleanup
+        if directories_to_cleanup:
+            await asyncio.sleep(0.2)
+        
+        # Clean up directories (try multiple times if needed)
+        for temp_dir in directories_to_cleanup:
+            for attempt in range(3):  # Try up to 3 times
+                try:
+                    if temp_dir.exists():
+                        # Try to remove any remaining files first
+                        import shutil
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        logger.debug(f"Cleaned up temp directory: {temp_dir}")
+                        break
+                except Exception as e:
+                    if attempt == 2:  # Last attempt
+                        cleanup_errors.append(f"{temp_dir}: {e}")
+                    else:
+                        await asyncio.sleep(0.5)  # Wait before retry
+        
         # Force garbage collection
         gc.collect()
         
         if cleanup_errors:
             logger.warning(f"Some cleanup errors occurred: {cleanup_errors}")
         else:
-            logger.debug(f"Successfully cleaned up {len(self.temp_files)} temp files")
+            logger.debug(f"Successfully cleaned up {len(self.temp_files)} temp files and directories")
 
 
 class PDFOCRService:
@@ -379,32 +412,62 @@ class PDFOCRService:
         try:
             logger.debug(f"Processing page {page_number}: {image_path}")
             
-            # Process image with external OCR service
-            result = await external_ocr_service.process_image(image_path, ocr_request)
+            # Import services here to avoid circular imports
+            from app.services.external_ocr_service import external_ocr_service
+            from app.services.ocr_llm_service import ocr_llm_service
+            from app.models.ocr_models import OCRLLMRequest
+            
+            # Step 1: Process image with external service (preprocessing) 
+            processed_result = await external_ocr_service.process_image(image_path, ocr_request)
+            
+            if not processed_result.success:
+                return PDFPageResult(
+                    page_number=page_number,
+                    extracted_text="",
+                    processing_time=time.time() - start_time,
+                    success=False,
+                    error_message=f"Image preprocessing failed: {processed_result.error_message}",
+                    threshold_used=ocr_request.threshold,
+                    contrast_level_used=ocr_request.contrast_level
+                )
+            
+            # Step 2: Extract text using LLM service
+            ocr_llm_request = OCRLLMRequest(
+                threshold=ocr_request.threshold,
+                contrast_level=ocr_request.contrast_level,
+                prompt=None,  # Use default prompt
+                model=None    # Use default model
+            )
+            
+            llm_result = await ocr_llm_service.process_image_with_llm(
+                processed_image_base64=processed_result.processed_image_base64,
+                ocr_request=ocr_llm_request,
+                image_processing_time=processed_result.processing_time
+            )
             
             processing_time = time.time() - start_time
             
-            if result.success:
+            if llm_result.success:
                 logger.debug(f"Page {page_number} processed successfully in {processing_time:.2f}s")
                 return PDFPageResult(
                     page_number=page_number,
-                    extracted_text=result.extracted_text,
+                    extracted_text=llm_result.extracted_text,
                     processing_time=processing_time,
                     success=True,
                     error_message=None,
-                    threshold_used=result.threshold_used,
-                    contrast_level_used=result.contrast_level_used
+                    threshold_used=llm_result.threshold_used,
+                    contrast_level_used=llm_result.contrast_level_used
                 )
             else:
-                logger.warning(f"Page {page_number} OCR failed")
+                logger.warning(f"Page {page_number} LLM text extraction failed")
                 return PDFPageResult(
                     page_number=page_number,
                     extracted_text="",
                     processing_time=processing_time,
                     success=False,
-                    error_message="OCR processing failed",
-                    threshold_used=result.threshold_used,
-                    contrast_level_used=result.contrast_level_used
+                    error_message="LLM text extraction failed",
+                    threshold_used=llm_result.threshold_used,
+                    contrast_level_used=llm_result.contrast_level_used
                 )
                 
         except Exception as e:
@@ -456,17 +519,19 @@ class PDFOCRService:
                 # 3. Process images with LLM in batches for memory efficiency
                 ocr_start_time = time.time()
                 page_results = await self._process_images_batch_with_llm(temp_images, request)
-                image_processing_time = time.time() - ocr_start_time
+                batch_processing_time = time.time() - ocr_start_time
                 
-                # 4. Calculate LLM processing time from page results
-                llm_processing_time = sum(result.llm_processing_time for result in page_results if result.success)
+                # 4. Calculate timing metrics correctly
+                # Since pages are processed in parallel, we need to calculate properly:
+                total_image_preprocessing_time = sum(result.image_processing_time for result in page_results if result.success)
+                max_llm_processing_time = max((result.llm_processing_time for result in page_results if result.success), default=0.0)
                 
                 total_processing_time = time.time() - start_time
                 processed_pages = sum(1 for result in page_results if result.success)
                 
                 logger.info(
                     f"PDF LLM processing completed: {processed_pages}/{page_count} pages successful "
-                    f"in {total_processing_time:.2f}s (LLM: {llm_processing_time:.2f}s)"
+                    f"in {total_processing_time:.2f}s (Batch: {batch_processing_time:.2f}s, Max LLM: {max_llm_processing_time:.2f}s)"
                 )
                 
                 return PDFLLMOCRResult(
@@ -476,8 +541,8 @@ class PDFOCRService:
                     results=page_results,
                     total_processing_time=total_processing_time,
                     pdf_processing_time=pdf_processing_time,
-                    image_processing_time=image_processing_time,
-                    llm_processing_time=llm_processing_time,
+                    image_processing_time=total_image_preprocessing_time,
+                    llm_processing_time=max_llm_processing_time,
                     dpi_used=request.dpi,
                     model_used=request.model or settings.OCR_LLM_MODEL,
                     prompt_used=request.prompt or settings.OCR_LLM_DEFAULT_PROMPT
@@ -547,7 +612,6 @@ class PDFOCRService:
                     results.append(PDFPageLLMResult(
                         page_number=i + idx + 1,
                         extracted_text="",
-                        original_ocr_text="",
                         processing_time=0.0,
                         image_processing_time=0.0,
                         llm_processing_time=0.0,
@@ -601,10 +665,9 @@ class PDFOCRService:
             
             # Process with LLM using the OCR LLM service
             llm_result = await ocr_llm_service.process_image_with_llm(
-                processed_data["processed_image_base64"],
-                processed_data["original_ocr_text"],
-                ocr_llm_request,
-                processed_data["image_processing_time"]
+                processed_image_base64=processed_data["processed_image_base64"],
+                ocr_request=ocr_llm_request,
+                image_processing_time=processed_data["image_processing_time"]
             )
             
             total_processing_time = time.time() - start_time
@@ -614,7 +677,6 @@ class PDFOCRService:
                 return PDFPageLLMResult(
                     page_number=page_number,
                     extracted_text=llm_result.extracted_text,
-                    original_ocr_text=llm_result.original_ocr_text,
                     processing_time=total_processing_time,
                     image_processing_time=llm_result.image_processing_time,
                     llm_processing_time=llm_result.llm_processing_time,
@@ -630,7 +692,6 @@ class PDFOCRService:
                 return PDFPageLLMResult(
                     page_number=page_number,
                     extracted_text="",
-                    original_ocr_text=llm_result.original_ocr_text,
                     processing_time=total_processing_time,
                     image_processing_time=llm_result.image_processing_time,
                     llm_processing_time=llm_result.llm_processing_time,
@@ -649,7 +710,6 @@ class PDFOCRService:
             return PDFPageLLMResult(
                 page_number=page_number,
                 extracted_text="",
-                original_ocr_text="",
                 processing_time=total_processing_time,
                 image_processing_time=0.0,
                 llm_processing_time=0.0,
@@ -682,7 +742,6 @@ class PDFOCRService:
             
             return {
                 "processed_image_base64": processed_result.processed_image_base64 if processed_result.success else "",
-                "original_ocr_text": "",  # No original text from preprocessing service
                 "image_processing_time": image_processing_time
             }
             
@@ -692,7 +751,6 @@ class PDFOCRService:
             
             return {
                 "processed_image_base64": "",
-                "original_ocr_text": "",
                 "image_processing_time": image_processing_time
             }
 
@@ -1019,7 +1077,7 @@ class PDFOCRService:
         traditional_results = []
         streaming_results = []
         
-        # Convert PDF request to OCR request
+        # Convert PDF request to OCR request  
         ocr_request = OCRRequest(
             threshold=request.threshold,
             contrast_level=request.contrast_level
@@ -1035,41 +1093,19 @@ class PDFOCRService:
                 # Check for task cancellation before processing each page
                 await self.check_task_cancellation(task_id)
                 
-                # Process single page
-                result = await external_ocr_service.process_image(image_path, ocr_request)
+                # Process single page with OCR (similar to sync version)
+                result = await self._process_single_image(image_path, page_num, ocr_request)
                 page_processing_time = time.time() - page_start_time
                 
-                # Create traditional result
-                if result.success:
-                    traditional_result = PDFPageResult(
-                        page_number=page_num,
-                        extracted_text=result.extracted_text,
-                        processing_time=page_processing_time,
-                        success=True,
-                        error_message=None,
-                        threshold_used=result.threshold_used,
-                        contrast_level_used=result.contrast_level_used
-                    )
-                else:
-                    traditional_result = PDFPageResult(
-                        page_number=page_num,
-                        extracted_text="",
-                        processing_time=page_processing_time,
-                        success=False,
-                        error_message="OCR processing failed",
-                        threshold_used=result.threshold_used,
-                        contrast_level_used=result.contrast_level_used
-                    )
-                
-                traditional_results.append(traditional_result)
+                traditional_results.append(result)
                 
                 # Create streaming result
                 stream_result = PDFPageStreamResult(
                     page_number=page_num,
-                    extracted_text=result.extracted_text if result.success else "",
-                    processing_time=page_processing_time,
+                    extracted_text=result.extracted_text,
+                    processing_time=page_processing_time, 
                     success=result.success,
-                    error_message=None if result.success else "OCR processing failed",
+                    error_message=result.error_message,
                     threshold_used=result.threshold_used,
                     contrast_level_used=result.contrast_level_used,
                     timestamp=datetime.now(UTC)
@@ -1216,7 +1252,6 @@ class PDFOCRService:
                 stream_result = PDFPageLLMStreamResult(
                     page_number=page_num,
                     extracted_text=result.extracted_text,
-                    original_ocr_text=result.original_ocr_text,
                     processing_time=result.processing_time,
                     image_processing_time=result.image_processing_time,
                     llm_processing_time=result.llm_processing_time,
@@ -1268,7 +1303,6 @@ class PDFOCRService:
                 traditional_result = PDFPageLLMResult(
                     page_number=page_num,
                     extracted_text="",
-                    original_ocr_text="",
                     processing_time=page_processing_time,
                     image_processing_time=0.0,
                     llm_processing_time=0.0,
@@ -1286,7 +1320,6 @@ class PDFOCRService:
                 stream_result = PDFPageLLMStreamResult(
                     page_number=page_num,
                     extracted_text="",
-                    original_ocr_text="",
                     processing_time=page_processing_time,
                     image_processing_time=0.0,
                     llm_processing_time=0.0,

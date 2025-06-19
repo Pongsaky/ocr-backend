@@ -91,7 +91,6 @@ class TestPDFStreamingModels:
         page_result = PDFPageLLMStreamResult(
             page_number=1,
             extracted_text="Enhanced text",
-            original_ocr_text="Original text",
             processing_time=4.2,
             image_processing_time=2.1,
             llm_processing_time=2.1,
@@ -118,7 +117,6 @@ class TestPDFStreamingModels:
         
         assert status.task_id == "test-llm-task-123"
         assert status.latest_page_result.extracted_text == "Enhanced text"
-        assert status.latest_page_result.original_ocr_text == "Original text"
         assert status.progress_percentage == 50.0
 
 

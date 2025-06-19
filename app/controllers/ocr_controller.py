@@ -188,7 +188,6 @@ class OCRController:
             # Use LLM service to extract text from processed image
             llm_result = await ocr_llm_service.process_image_with_llm(
                 processed_image_base64=processed_result.processed_image_base64,
-                original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
                 image_processing_time=processed_result.processing_time
             )
@@ -258,7 +257,6 @@ class OCRController:
             
             llm_result = await ocr_llm_service.process_image_with_llm(
                 processed_image_base64=processed_result.processed_image_base64,
-                original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
                 image_processing_time=processed_result.processing_time
             )
@@ -436,7 +434,6 @@ class OCRController:
             # Step 2: Extract text using LLM service
             result = await ocr_llm_service.process_image_with_llm(
                 processed_image_base64=processed_result.processed_image_base64,
-                original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
                 image_processing_time=processed_result.processing_time
             )
@@ -497,7 +494,6 @@ class OCRController:
             # Step 2: Extract text using LLM service
             result = await ocr_llm_service.process_image_with_llm(
                 processed_image_base64=processed_result.processed_image_base64,
-                original_ocr_text="",  # No original text from preprocessing
                 ocr_request=ocr_llm_request,
                 image_processing_time=processed_result.processing_time
             )
@@ -988,7 +984,7 @@ class OCRController:
                 status="failed",
                 result=None,
                 error_message=str(e),
-                created_at=self.pdf_llm_tasks[task_id].created_at,
+                created_at=self.pdf_llm_tasks[task_id].created_at if task_id in self.pdf_llm_tasks else datetime.now(UTC),
                 completed_at=datetime.now(UTC)
             )
             

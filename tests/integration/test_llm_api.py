@@ -33,7 +33,6 @@ def test_process_image_with_llm_sync_real_api():
     
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
     
-    original_ocr_text = "This is some initial OCR text that might be inaccurate."
     image_processing_time = 1.2 
     
     request_data = OCRLLMRequest(
@@ -45,7 +44,6 @@ def test_process_image_with_llm_sync_real_api():
     print("\n🚀 Making real API call to LLM service...")
     result = llm_service.process_image_with_llm_sync(
         base64_image,
-        original_ocr_text,
         request_data,
         image_processing_time
     )
@@ -55,7 +53,6 @@ def test_process_image_with_llm_sync_real_api():
     assert result.success is True
     assert result.extracted_text is not None
     assert len(result.extracted_text) > 0
-    assert result.original_ocr_text == original_ocr_text
     assert result.processing_time > image_processing_time
     assert result.llm_processing_time > 0
     

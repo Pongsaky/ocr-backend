@@ -95,13 +95,11 @@ class TestLLMIntegration:
     @pytest.mark.integration  
     async def test_real_llm_api_with_simple_image(self, llm_service, test_image_base64, sample_ocr_llm_request):
         """Test real LLM API call with a simple image."""
-        original_ocr_text = "Sample OCR text"
         image_processing_time = 1.0
         
         try:
             result = await llm_service.process_image_with_llm(
                 test_image_base64,
-                original_ocr_text, 
                 sample_ocr_llm_request,
                 image_processing_time
             )
@@ -119,7 +117,6 @@ class TestLLMIntegration:
             assert result.llm_processing_time >= 0
             
             # Verify original data is preserved
-            assert result.original_ocr_text == original_ocr_text
             assert result.image_processing_time == image_processing_time
             assert result.threshold_used == sample_ocr_llm_request.threshold
             assert result.contrast_level_used == sample_ocr_llm_request.contrast_level
@@ -131,7 +128,6 @@ class TestLLMIntegration:
             print(f"   Processing time: {result.processing_time:.2f}s")
             print(f"   LLM processing time: {result.llm_processing_time:.2f}s")
             print(f"   Model used: {result.model_used}")
-            print(f"   Original OCR: '{result.original_ocr_text}'")
             
             if result.success:
                 print(f"   ✅ Enhanced text: '{result.extracted_text[:100]}...'")
@@ -407,14 +403,12 @@ class TestLLMIntegration:
         # 2. LLM enhancement (real API call)
         
         # Simulated OCR result
-        original_ocr_text = "Sample text extracted by OCR service"
         image_processing_time = 2.5
         
         # LLM enhancement request  
         llm_request = OCRLLMRequest(
             threshold=150,
             contrast_level=1.2,
-            prompt="Please clean up and enhance the following OCR text, correcting any errors and improving readability. Original text: " + original_ocr_text,
             model="nectec/Pathumma-vision-ocr-lora-dev"
         )
         
@@ -422,20 +416,17 @@ class TestLLMIntegration:
             # Real LLM processing
             final_result = await llm_service.process_image_with_llm(
                 sample_text_image_base64,
-                original_ocr_text,
                 llm_request,
                 image_processing_time
             )
             
             # Verify complete workflow result
             assert isinstance(final_result, OCRLLMResult)
-            assert final_result.original_ocr_text == original_ocr_text
             assert final_result.image_processing_time == image_processing_time
             assert final_result.processing_time > image_processing_time
             
             if final_result.success:
                 print(f"✅ End-to-end workflow completed successfully")
-                print(f"Original: '{original_ocr_text}'")
                 print(f"Enhanced: '{final_result.extracted_text[:100]}...'")
                 
                 # The enhanced text might be different from original

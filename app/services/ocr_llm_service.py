@@ -37,7 +37,6 @@ class OCRLLMService:
     async def process_image_with_llm(
         self, 
         processed_image_base64: str,
-        original_ocr_text: str,
         ocr_request: OCRLLMRequest,
         image_processing_time: float
     ) -> OCRLLMResult:
@@ -46,7 +45,6 @@ class OCRLLMService:
         
         Args:
             processed_image_base64: Base64 encoded processed image
-            original_ocr_text: Original OCR extracted text
             ocr_request: OCR LLM processing parameters
             image_processing_time: Time taken for initial OCR processing
             
@@ -90,8 +88,7 @@ class OCRLLMService:
             
             return OCRLLMResult(
                 success=True,
-                extracted_text=enhanced_text.strip(),
-                original_ocr_text=original_ocr_text.strip(),
+                extracted_text=enhanced_text.strip() if enhanced_text else "",
                 processing_time=total_processing_time,
                 image_processing_time=image_processing_time,
                 llm_processing_time=llm_processing_time,
@@ -108,7 +105,6 @@ class OCRLLMService:
             return OCRLLMResult(
                 success=False,
                 extracted_text="",
-                original_ocr_text=original_ocr_text,
                 processing_time=total_processing_time,
                 image_processing_time=image_processing_time,
                 llm_processing_time=0.0,
@@ -183,8 +179,21 @@ class OCRLLMService:
                 # Extract text from response
                 llm_response = LLMChatResponse(**response_data)
                 if llm_response.choices and len(llm_response.choices) > 0:
-                    extracted_text = llm_response.choices[0].message.content
-                    logger.debug(f"LLM API response received: {len(extracted_text)} characters")
+                    message_content = llm_response.choices[0].message.content
+                    logger.debug(f"LLM API response received: {len(str(message_content)) if message_content else 0} characters")
+                    
+                    # Handle None content gracefully
+                    if message_content is None:
+                        logger.warning("LLM API returned None content - this might indicate an API response format issue")
+                        extracted_text = ""
+                    else:
+                        extracted_text = str(message_content)
+                    
+                    # Log if text is empty for debugging
+                    if not extracted_text or not extracted_text.strip():
+                        logger.warning(f"LLM API returned empty/whitespace text. Raw content: '{repr(message_content)}'")
+                        logger.warning(f"Full LLM response: {response_data}")
+                    
                     return extracted_text
                 else:
                     raise Exception("No choices in LLM response")

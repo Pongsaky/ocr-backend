@@ -52,14 +52,33 @@ class TestOCRAPIEndpoints:
     
     def test_process_image_async_success(self, client, sample_image_file):
         """Test async OCR processing endpoint success."""
-        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_process:
-            from app.models.ocr_models import OCRResult
-            mock_process.return_value = OCRResult(
+        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external_process, \
+             patch('app.controllers.ocr_controller.ocr_llm_service.process_image_with_llm', new_callable=AsyncMock) as mock_llm_process:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            from app.models.ocr_models import OCRLLMResult
+            
+            # Mock external service returning processed image
+            mock_external_process.return_value = ImageProcessingResult(
+                success=True,
+                processed_image_base64="fake_base64_processed_image",
+                processing_time=0.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                extracted_text=""  # External service doesn't extract text
+            )
+            
+            # Mock LLM service returning extracted text
+            mock_llm_process.return_value = OCRLLMResult(
                 success=True,
                 extracted_text="Test extracted text",
                 processing_time=1.0,
+                image_processing_time=0.5,
+                llm_processing_time=0.5,
                 threshold_used=500,
-                contrast_level_used=1.3
+                contrast_level_used=1.3,
+                model_used="test-model",
+                prompt_used="test-prompt"
             )
             
             response = client.post(
@@ -99,14 +118,33 @@ class TestOCRAPIEndpoints:
     
     def test_process_image_sync_success(self, client, sample_image_file):
         """Test sync OCR processing endpoint success."""
-        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_process:
-            from app.models.ocr_models import OCRResult
-            mock_process.return_value = OCRResult(
+        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external_process, \
+             patch('app.controllers.ocr_controller.ocr_llm_service.process_image_with_llm', new_callable=AsyncMock) as mock_llm_process:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            from app.models.ocr_models import OCRLLMResult
+            
+            # Mock external service returning processed image
+            mock_external_process.return_value = ImageProcessingResult(
+                success=True,
+                processed_image_base64="fake_base64_processed_image",
+                processing_time=0.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                extracted_text=""  # External service doesn't extract text
+            )
+            
+            # Mock LLM service returning extracted text
+            mock_llm_process.return_value = OCRLLMResult(
                 success=True,
                 extracted_text="Test extracted text",
                 processing_time=1.0,
+                image_processing_time=0.5,
+                llm_processing_time=0.5,
                 threshold_used=500,
-                contrast_level_used=1.3
+                contrast_level_used=1.3,
+                model_used="test-model",
+                prompt_used="test-prompt"
             )
             
             response = client.post(
@@ -138,7 +176,35 @@ class TestOCRAPIEndpoints:
     def test_get_task_status_success(self, client):
         """Test get task status endpoint success."""
         # First create a task
-        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock):
+        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external_process, \
+             patch('app.controllers.ocr_controller.ocr_llm_service.process_image_with_llm', new_callable=AsyncMock) as mock_llm_process:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            from app.models.ocr_models import OCRLLMResult
+            
+            # Mock external service returning processed image
+            mock_external_process.return_value = ImageProcessingResult(
+                success=True,
+                processed_image_base64="fake_base64_processed_image",
+                processing_time=0.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                extracted_text=""
+            )
+            
+            # Mock LLM service returning extracted text
+            mock_llm_process.return_value = OCRLLMResult(
+                success=True,
+                extracted_text="Test extracted text",
+                processing_time=1.0,
+                image_processing_time=0.5,
+                llm_processing_time=0.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                model_used="test-model",
+                prompt_used="test-prompt"
+            )
+            
             sample_image_file = ("test_image.jpg", io.BytesIO(b"fake_image"), "image/jpeg")
             
             create_response = client.post(

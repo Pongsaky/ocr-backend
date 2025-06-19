@@ -75,7 +75,6 @@ class TestOCRLLMService:
     @pytest.mark.asyncio
     async def test_process_image_with_llm_success(self, llm_service, sample_base64_image, sample_ocr_llm_request):
         """Test successful LLM-enhanced OCR processing."""
-        original_ocr_text = "Original OCR text"
         image_processing_time = 1.5
         
         with patch.object(llm_service, '_call_llm_api', new_callable=AsyncMock) as mock_api:
@@ -83,14 +82,12 @@ class TestOCRLLMService:
             
             result = await llm_service.process_image_with_llm(
                 sample_base64_image, 
-                original_ocr_text, 
                 sample_ocr_llm_request, 
                 image_processing_time
             )
             
             assert result.success is True
             assert result.extracted_text == "Enhanced extracted text from image"
-            assert result.original_ocr_text == "Original OCR text"
             assert result.threshold_used == sample_ocr_llm_request.threshold
             assert result.contrast_level_used == sample_ocr_llm_request.contrast_level
             assert result.model_used == sample_ocr_llm_request.model
@@ -112,7 +109,6 @@ class TestOCRLLMService:
     @pytest.mark.asyncio
     async def test_process_image_with_llm_failure(self, llm_service, sample_base64_image, sample_ocr_llm_request):
         """Test LLM-enhanced OCR processing failure."""
-        original_ocr_text = "Original OCR text"
         image_processing_time = 1.5
         
         with patch.object(llm_service, '_call_llm_api', new_callable=AsyncMock) as mock_api:
@@ -120,14 +116,12 @@ class TestOCRLLMService:
             
             result = await llm_service.process_image_with_llm(
                 sample_base64_image, 
-                original_ocr_text, 
                 sample_ocr_llm_request, 
                 image_processing_time
             )
             
             assert result.success is False
             assert result.extracted_text == ""
-            assert result.original_ocr_text == "Original OCR text"
             assert result.processing_time > image_processing_time
             assert result.llm_processing_time == 0.0
 
@@ -326,7 +320,7 @@ class TestOCRLLMService:
             mock_api.return_value = "Custom model response"
             
             result = await llm_service.process_image_with_llm(
-                sample_base64_image, "original text", custom_request, 1.0
+                sample_base64_image, custom_request, 1.0
             )
             
             assert result.model_used == "custom-model"
@@ -344,7 +338,7 @@ class TestOCRLLMService:
             mock_api.return_value = "Custom prompt response"
             
             result = await llm_service.process_image_with_llm(
-                sample_base64_image, "original text", custom_request, 1.0
+                sample_base64_image, custom_request, 1.0
             )
             
             assert result.prompt_used == "Custom prompt for OCR"
@@ -408,7 +402,7 @@ class TestOCRLLMService:
             mock_api.return_value = "Default configuration response"
             
             result = await llm_service.process_image_with_llm(
-                sample_base64_image, "original text", minimal_request, 1.0
+                sample_base64_image, minimal_request, 1.0
             )
             
             assert result.model_used == llm_service.default_model

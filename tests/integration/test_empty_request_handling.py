@@ -33,14 +33,33 @@ class TestEmptyRequestHandling:
     
     def test_sync_processing_with_empty_request(self, client, sample_image_file):
         """Test sync OCR processing with empty request parameter."""
-        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_process:
-            from app.models.ocr_models import OCRResult
-            mock_process.return_value = OCRResult(
+        with patch('app.controllers.ocr_controller.external_ocr_service.process_image', new_callable=AsyncMock) as mock_external_process, \
+             patch('app.controllers.ocr_controller.ocr_llm_service.process_image_with_llm', new_callable=AsyncMock) as mock_llm_process:
+            
+            from app.services.external_ocr_service import ImageProcessingResult
+            from app.models.ocr_models import OCRLLMResult
+            
+            # Mock external service returning processed image
+            mock_external_process.return_value = ImageProcessingResult(
+                success=True,
+                processed_image_base64="fake_base64_processed_image",
+                processing_time=0.5,
+                threshold_used=500,
+                contrast_level_used=1.3,
+                extracted_text=""
+            )
+            
+            # Mock LLM service returning extracted text
+            mock_llm_process.return_value = OCRLLMResult(
                 success=True,
                 extracted_text="Test extracted text with defaults",
                 processing_time=1.0,
+                image_processing_time=0.5,
+                llm_processing_time=0.5,
                 threshold_used=500,  # Default value
-                contrast_level_used=1.3  # Default value
+                contrast_level_used=1.3,  # Default value
+                model_used="test-model",
+                prompt_used="test-prompt"
             )
             
             # Send request without request parameter
@@ -56,9 +75,9 @@ class TestEmptyRequestHandling:
             assert data["threshold_used"] == 500
             assert data["contrast_level_used"] == 1.3
             
-            # Verify the service was called with default values
-            mock_process.assert_called_once()
-            call_args = mock_process.call_args[0]
+            # Verify the external service was called with default values
+            mock_external_process.assert_called_once()
+            call_args = mock_external_process.call_args[0]
             ocr_request = call_args[1]
             assert ocr_request.threshold == 500
             assert ocr_request.contrast_level == 1.3

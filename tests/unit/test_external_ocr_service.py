@@ -35,7 +35,6 @@ class TestExternalOCRService:
                 processing_time=1.0,
                 threshold_used=sample_ocr_request.threshold,
                 contrast_level_used=sample_ocr_request.contrast_level,
-                original_ocr_text="",
                 image_processing_time=0.5,
                 llm_processing_time=0.5,
                 model_used="gpt-4",
