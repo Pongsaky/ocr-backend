@@ -21,6 +21,7 @@ from app.middleware.request_id import RequestIDMiddleware
 
 # --- Router Imports ---
 from app.routers import ocr_router
+from app.routers import unified_router
 
 # --- Initialize Settings and Logger ---
 settings = get_settings()
@@ -99,7 +100,8 @@ app.add_middleware(RequestIDMiddleware)
 
 # --- Include Routers ---
 logger.info("Including API routers...")
-app.include_router(ocr_router.router, prefix="/v1", tags=["OCR"])
+app.include_router(unified_router.router, prefix="/v1", tags=["🌟 Unified OCR"])
+app.include_router(ocr_router.router, prefix="/v1", tags=["📄 Legacy OCR"])
 
 # --- Root Endpoint ---
 @app.get("/", tags=["Root"])
