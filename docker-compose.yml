@@ -6,59 +6,8 @@ services:
     container_name: ocr-backend-api
     ports:
       - "8000:8000"
-    environment:
-      # Application Settings
-      - APP_ENV=production
-      - DEBUG=False
-      - PROJECT_NAME=OCR Backend API
-      - LOG_LEVEL=INFO
-      
-      # Server Settings
-      - HOST=0.0.0.0
-      - PORT=8000
-      
-      # Directory Settings (all within container)
-      - UPLOAD_DIR=/app/uploads
-      - RESULTS_DIR=/app/results
-      - TEMP_DIR=/app/tmp
-      - LOG_FILE=/app/logs/ocr-backend.log
-      
-      # External OCR API Settings
-      - EXTERNAL_OCR_BASE_URL=http://203.185.131.205/vision-world
-      - EXTERNAL_OCR_ENDPOINT=/process-image
-      - EXTERNAL_OCR_TIMEOUT=30
-      
-      # OCR LLM API Settings
-      - OCR_LLM_BASE_URL=http://203.185.131.205/pathumma-vision-ocr
-      - OCR_LLM_ENDPOINT=/v1/chat/completions
-      - OCR_LLM_TIMEOUT=60
-      - OCR_LLM_MODEL=nectec/Pathumma-vision-ocr-lora-dev
-      - OCR_LLM_DEFAULT_PROMPT=ข้อความในภาพนี้
-      
-      # Image Scaling Settings
-      - MAX_IMAGE_PIXELS=3000000
-      - IMAGE_SCALING_QUALITY=95
-      - IMAGE_SCALING_RESAMPLE=LANCZOS
-      - ENABLE_IMAGE_SCALING=True
-      
-      # PDF Processing Settings
-      - MAX_PDF_SIZE=52428800
-      - MAX_PDF_PAGES=10
-      - PDF_DPI=300
-      - PDF_BATCH_SIZE=3
-      
-      # Processing Settings
-      - MAX_CONCURRENT_TASKS=5
-      - TASK_TIMEOUT=300
-      - CLEANUP_INTERVAL=3600
-      
-      # LibreOffice Settings
-      - LIBREOFFICE_BASE_URL=http://libreoffice:8080
-      - LIBREOFFICE_CONVERT_ENDPOINT=/request
-      - LIBREOFFICE_TIMEOUT=30
-      - LIBREOFFICE_MAX_RETRIES=3
-      - LIBREOFFICE_RETRY_DELAY=1.0
-    
+    env_file:
+      - .env
     volumes:
       # Mount directories for persistence and debugging with timestamp isolation
       - ./data/${TIMESTAMP:-default}/uploads:/app/uploads
