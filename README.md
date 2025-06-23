@@ -138,6 +138,15 @@ LOG_MAX_SIZE=10485760
 LOG_BACKUP_COUNT=5
 ```
 
+## 👩‍💻 **Frontend Integration**
+
+**For Frontend Developers**: See the complete **[Frontend Integration Guide](docs/FRONTEND_INTEGRATION_GUIDE.md)** which includes:
+- 🚀 Step-by-step API integration
+- 🔧 Complete React component example  
+- ⚠️ Error handling best practices
+- 📝 TypeScript definitions
+- 🎯 Real-world usage patterns
+
 ## 🚀 Running the Application
 
 ### Development Mode

@@ -381,43 +381,69 @@ async def cancel_universal_task(
 ):
     """Cancel any processing task regardless of file type."""
     try:
-        # Check if task exists
-        if task_id not in unified_processor.streaming_queues:
+        # Check if task exists in streaming queues (actively processing)
+        is_actively_processing = task_id in unified_processor.streaming_queues
+        
+        # Check if task exists in metadata (recently completed or processing)
+        task_meta = unified_processor.task_metadata.get(task_id)
+        
+        if not is_actively_processing and not task_meta:
+            # Task truly doesn't exist
             raise HTTPException(
                 status_code=404,
                 detail=f"Task {task_id} not found or already completed"
             )
         
-        # Get task metadata for proper cancellation
-        task_meta = unified_processor.task_metadata.get(task_id, {})
-        file_type = task_meta.get("file_type", "unknown")
-        request_obj = task_meta.get("request", UnifiedOCRRequest())
+        # If task is actively processing, perform normal cancellation
+        if is_actively_processing:
+            file_type = task_meta.get("file_type", "unknown") if task_meta else "unknown"
+            request_obj = task_meta.get("request", UnifiedOCRRequest()) if task_meta else UnifiedOCRRequest()
+            
+            # Send cancellation update
+            from app.models.unified_models import ProcessingStep
+            await unified_processor._send_progress_update(
+                task_id=task_id,
+                file_type=file_type,
+                mode=request_obj.mode if hasattr(request_obj, 'mode') else "basic",
+                status="cancelled",
+                step=ProcessingStep.CANCELLED,
+                progress=0.0,
+                message=f"Task cancelled: {cancel_request.reason}"
+            )
+            
+            # Cleanup task
+            await unified_processor._cleanup_task(task_id)
+            
+            response = UnifiedTaskCancellationResponse(
+                task_id=task_id,
+                status="cancelled",
+                message="Task cancelled successfully",
+                cancelled_at=datetime.now(UTC),
+                cancellation_reason=cancel_request.reason
+            )
+            
+            logger.info(f"🛑 Cancelled active task {task_id}: {cancel_request.reason}")
+            return response
         
-        # Send cancellation update
-        from app.models.unified_models import ProcessingStep
-        await unified_processor._send_progress_update(
-            task_id=task_id,
-            file_type=file_type,
-            mode=request_obj.mode if hasattr(request_obj, 'mode') else "basic",
-            status="cancelled",
-            step=ProcessingStep.CANCELLED,
-            progress=0.0,
-            message=f"Task cancelled: {cancel_request.reason}"
-        )
+        # If task recently completed (race condition case)
+        elif task_meta and task_meta.get("status") == "completed":
+            response = UnifiedTaskCancellationResponse(
+                task_id=task_id,
+                status="already_completed",
+                message="Task was already completed before cancellation request",
+                cancelled_at=datetime.now(UTC),
+                cancellation_reason="Task completed before cancellation could be processed"
+            )
+            
+            logger.info(f"ℹ️ Attempted to cancel already completed task {task_id}")
+            return response
         
-        # Cleanup task
-        await unified_processor._cleanup_task(task_id)
-        
-        response = UnifiedTaskCancellationResponse(
-            task_id=task_id,
-            status="cancelled",
-            message="Task cancelled successfully",
-            cancelled_at=datetime.now(UTC),
-            cancellation_reason=cancel_request.reason
-        )
-        
-        logger.info(f"🛑 Cancelled task {task_id}: {cancel_request.reason}")
-        return response
+        # Fallback for other cases
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Task {task_id} cannot be cancelled in its current state"
+            )
         
     except HTTPException:
         raise

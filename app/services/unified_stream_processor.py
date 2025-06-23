@@ -661,7 +661,7 @@ class UnifiedStreamProcessor:
     async def _cleanup_task(self, task_id: str):
         """Cleanup task resources."""
         try:
-            # Remove from streaming queues
+            # Remove from streaming queues immediately to stop streaming
             if task_id in self.streaming_queues:
                 del self.streaming_queues[task_id]
             
@@ -673,12 +673,32 @@ class UnifiedStreamProcessor:
                     Path(file_path).unlink()
                     logger.debug(f"🗑️ Cleaned up file: {file_path}")
                 
-                del self.task_metadata[task_id]
+                # Mark task as completed but keep metadata for a grace period
+                # This prevents race conditions with cancellation requests
+                task_meta["status"] = "completed"
+                task_meta["cleanup_time"] = datetime.now(UTC)
+                logger.debug(f"🏁 Marked task {task_id} as completed, keeping metadata for grace period")
+                
+                # Schedule delayed cleanup of metadata (after 30 seconds)
+                asyncio.create_task(self._delayed_metadata_cleanup(task_id))
             
             logger.debug(f"🧹 Cleaned up task {task_id}")
             
         except Exception as e:
             logger.error(f"Cleanup error for {task_id}: {e}")
+    
+    async def _delayed_metadata_cleanup(self, task_id: str):
+        """Remove task metadata after a grace period to prevent race conditions."""
+        try:
+            # Wait 30 seconds before final cleanup
+            await asyncio.sleep(30)
+            
+            if task_id in self.task_metadata:
+                del self.task_metadata[task_id]
+                logger.debug(f"🗑️ Final cleanup of metadata for task {task_id}")
+                
+        except Exception as e:
+            logger.error(f"Delayed cleanup error for {task_id}: {e}")
 
 
 # Singleton instance
