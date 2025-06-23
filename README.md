@@ -13,6 +13,7 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
 - **Multi-Format Support**: 
   - **Images**: JPEG, PNG, BMP, TIFF, WebP
   - **PDFs**: Multi-page documents with configurable DPI conversion
+  - **DOCX**: Microsoft Word documents (🔴 **disabled by default**, see [DOCX Feature Flag](docs/DOCX_FEATURE_FLAG.md))
 - **Advanced PDF Features**:
   - Page-by-page processing with individual results
   - Memory-efficient batch processing

@@ -188,25 +188,19 @@ async def process_pdf_with_streaming(
     """Process PDF with progress offset for DOCX integration."""
 ```
 
-### **Task 2.5: Docker Integration** ⚡ INFRASTRUCTURE
-**Status**: 🔴 NOT STARTED  
+### **Task 2.5: Docker Integration** ⚡ INFRASTRUCTURE  
+**Status**: ✅ **COMPLETED**  
 **Time Estimate**: 30 minutes
 
 **File**: `docker-compose.yml`
 
-**Add Service**:
-```yaml
-libreoffice:
-  image: libreoffice-converter:latest
-  ports:
-    - "8080:8080"
-  environment:
-    - CONVERSION_TIMEOUT=30
-    - MAX_FILE_SIZE=26214400
-  volumes:
-    - ./tmp:/tmp
-  restart: unless-stopped
-```
+**✅ Achievements**:
+- ✅ Added LibreOffice service using `libreofficedocker/libreoffice-unoserver:3.19`
+- ✅ Configured port mapping (8080:2004) and REST API endpoint (/request)
+- ✅ Updated environment variables for LibreOffice service
+- ✅ Added shared volumes for file exchange
+- ✅ Fixed import errors in unified_stream_processor.py  
+- ✅ Added development mode error handling with helpful instructions
 
 ### **Task 2.6: Test Suite Update** ⚡ QUALITY ASSURANCE
 **Status**: 🔴 NOT STARTED  
@@ -317,8 +311,15 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### **Current Session Progress**
 - [x] Task tracking file created
-- [x] Phase 1.1 Router tests - Major progress (12/15 passing)
+- [x] Phase 1.1 Router tests - Major progress (12/15 passing)  
 - [x] CRITICAL FIX: Streaming 404 error resolved
+- [x] **Phase 2 STARTED**: LibreOffice Docker Implementation
+- [x] Task 2.1: Configuration Setup ✅ COMPLETED
+- [x] Task 2.2: LibreOffice HTTP Client ✅ COMPLETED  
+- [x] Task 2.3: Enhanced DOCX OCR Service ✅ COMPLETED
+- [x] Task 2.4: PDF Service Integration ✅ COMPLETED (adapter pattern)
+- [x] Task 2.5: Docker Integration ✅ COMPLETED
+- [x] Task 2.6: DOCX Feature Flag Implementation ✅ COMPLETED
 
 ### **Issues Identified & Fixed**
 - **Router Tests**: Rate limiter & Form validation issues ✅ FIXED
@@ -326,17 +327,43 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - **Test Assertions**: Error message validation improvements ✅ FIXED
 - **Streaming 404 Error**: Race condition in task cleanup ✅ FIXED
 
-### **Streaming Bug Fix Details**
-**Problem**: Task cleanup happened immediately after processing, before client could connect to stream
-**Root Cause**: `_cleanup_task()` in `_process_file_async` finally block (line 323)
-**Solution**: Moved cleanup to `get_stream_generator` finally block
-**Impact**: ✅ Streaming endpoint now works correctly
+### **Phase 2 Implementation Summary**
+**✅ LibreOffice Configuration** (Task 2.1)
+- Added settings: `LIBREOFFICE_BASE_URL`, timeout, retries, endpoints  
+- Updated `production.env.example` with LibreOffice section
+- Added `aiohttp = "^3.11.0"` dependency to `pyproject.toml`
+
+**✅ LibreOffice HTTP Client** (Task 2.2)
+- Created `app/services/libreoffice_client.py` with full HTTP client
+- Health checks, retries, exponential backoff, error handling
+- Supports DOCX → PDF conversion via LibreOffice service
+- Robust error handling with custom `LibreOfficeConversionError`
+
+**✅ Enhanced DOCX OCR Service** (Task 2.3)
+- Complete rewrite from placeholder to full implementation
+- LibreOffice client integration for DOCX → PDF conversion  
+- Progress adapter pattern for PDF service integration
+- Streaming progress translation (25% → 100% for PDF processing)
+- Proper temp file cleanup and error handling
+
+**✅ PDF Service Integration** (Task 2.4)
+- Used clean adapter pattern instead of modifying PDF service
+- `_translate_pdf_progress()` method handles progress offset/scaling
+- Preserves existing PDF service interface & prevents regression
+- Handles both `ProcessingMode.BASIC` and `ProcessingMode.LLM_ENHANCED`
+
+**📂 Files Created/Modified**:
+- `config/settings.py` - LibreOffice configuration
+- `production.env.example` - Production config template
+- `pyproject.toml` - Added aiohttp dependency, updated poetry.lock
+- `app/services/libreoffice_client.py` - **NEW** LibreOffice HTTP client
+- `app/services/docx_ocr_service.py` - Complete rewrite with full implementation
 
 ### **Next Steps**
-1. Finish remaining 3 router test fixes
-2. Move to DOCX test updates  
-3. Implement LibreOffice client
-4. Complete full pipeline
+1. ✅ Task 2.5: Docker Integration - LibreOffice service to docker-compose ✅ COMPLETED
+2. ✅ Task 2.6: DOCX Feature Flag - Preserve code, disable by default ✅ COMPLETED
+3. Future: Test Suite Update - Update DOCX tests for new implementation
+4. Future: Complete remaining router test fixes (3/15 still failing)
 
 ### **Context for Future Sessions**
 - Use this file to track progress

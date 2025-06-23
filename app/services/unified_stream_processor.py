@@ -64,11 +64,20 @@ class FileTypeDetector:
     @classmethod
     async def detect_file_type(cls, file: UploadFile) -> FileType:
         """Detect file type from MIME type and extension."""
+        from config.settings import settings
+        
         logger.debug(f"Detecting file type for: {file.filename} (MIME: {file.content_type})")
         
         # Primary: MIME type detection
         for file_type, mime_types in cls.SUPPORTED_MIME_TYPES.items():
             if file.content_type in mime_types:
+                # Check if DOCX processing is disabled
+                if file_type == FileType.DOCX and not settings.ENABLE_DOCX_PROCESSING:
+                    logger.warning(f"🚫 DOCX file detected but DOCX processing is disabled")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="DOCX processing is currently disabled. Supported formats: images and PDFs only."
+                    )
                 logger.info(f"✅ Detected {file_type.value} from MIME type: {file.content_type}")
                 return file_type
         
@@ -77,12 +86,22 @@ class FileTypeDetector:
             file_ext = Path(file.filename).suffix.lower()
             for file_type, extensions in cls.SUPPORTED_EXTENSIONS.items():
                 if file_ext in extensions:
+                    # Check if DOCX processing is disabled
+                    if file_type == FileType.DOCX and not settings.ENABLE_DOCX_PROCESSING:
+                        logger.warning(f"🚫 DOCX file detected but DOCX processing is disabled")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="DOCX processing is currently disabled. Supported formats: images and PDFs only."
+                        )
                     logger.info(f"✅ Detected {file_type.value} from extension: {file_ext}")
                     return file_type
         
         # No match found
         supported_types = []
         for ft, mimes in cls.SUPPORTED_MIME_TYPES.items():
+            # Skip DOCX from supported types if disabled
+            if ft == FileType.DOCX and not settings.ENABLE_DOCX_PROCESSING:
+                continue
             supported_types.extend(mimes)
         
         raise HTTPException(
@@ -474,44 +493,23 @@ class UnifiedStreamProcessor:
         request: UnifiedOCRRequest, 
         streaming_queue: asyncio.Queue
     ):
-        """Process DOCX with streaming updates (placeholder for now)."""
+        """Process DOCX with streaming updates using LibreOffice service."""
         try:
-            # For now, simulate DOCX processing
-            # TODO: Implement actual DOCX -> PDF -> OCR pipeline
+            # Import the DOCX service
+            from app.services.docx_ocr_service import docx_ocr_service
             
-            await self._send_progress_update(
-                task_id, FileType.DOCX, request.mode, "processing",
-                ProcessingStep.CONVERSION, 30.0, "Converting DOCX to PDF..."
+            logger.info(f"🎯 Processing DOCX file for task {task_id}")
+            
+            # Use the LibreOffice DOCX service with unified request directly
+            result = await docx_ocr_service.process_docx_with_streaming(
+                file_path, request, task_id, streaming_queue
             )
             
-            # Simulate conversion time
-            await asyncio.sleep(2.0)
+            if not result.get("success", False):
+                error_msg = result.get("error", "Unknown DOCX processing error")
+                raise Exception(f"DOCX processing failed: {error_msg}")
             
-            await self._send_progress_update(
-                task_id, FileType.DOCX, request.mode, "processing",
-                ProcessingStep.OCR_PROCESSING, 70.0, "Processing converted document..."
-            )
-            
-            # Simulate OCR processing
-            await asyncio.sleep(3.0)
-            
-            # Create mock result
-            page_result = UnifiedPageResult(
-                page_number=1,
-                extracted_text="DOCX processing is not yet implemented. This is a placeholder result.",
-                processing_time=5.0,
-                success=True,
-                threshold_used=request.threshold,
-                contrast_level_used=request.contrast_level,
-                timestamp=datetime.now(UTC)
-            )
-            
-            await self._send_progress_update(
-                task_id, FileType.DOCX, request.mode, "completed",
-                ProcessingStep.COMPLETED, 100.0, "DOCX processing completed (placeholder)",
-                latest_result=page_result,
-                cumulative_results=[page_result]
-            )
+            logger.info(f"✅ DOCX processing completed for {task_id}")
             
         except Exception as e:
             logger.error(f"DOCX processing failed for {task_id}: {e}")

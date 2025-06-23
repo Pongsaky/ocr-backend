@@ -85,6 +85,23 @@ class Settings(BaseSettings):
     PDF_IMAGE_FORMAT: str = os.getenv("PDF_IMAGE_FORMAT", "PNG")
     PDF_BATCH_SIZE: int = int(os.getenv("PDF_BATCH_SIZE", "3"))  # Process images in batches
 
+    # --- DOCX Processing Settings ---
+    ENABLE_DOCX_PROCESSING: bool = os.getenv("ENABLE_DOCX_PROCESSING", "False").lower() in ("true", "1", "t")
+    MAX_DOCX_SIZE: int = int(os.getenv("MAX_DOCX_SIZE", "26214400"))  # 25MB
+    ALLOWED_DOCX_EXTENSIONS: List[str] = json.loads(
+        os.getenv(
+            "ALLOWED_DOCX_EXTENSIONS",
+            '["docx"]'
+        )
+    )
+    
+    # --- LibreOffice Service Settings ---
+    LIBREOFFICE_BASE_URL: str = os.getenv("LIBREOFFICE_BASE_URL", "http://localhost:8080")
+    LIBREOFFICE_CONVERT_ENDPOINT: str = os.getenv("LIBREOFFICE_CONVERT_ENDPOINT", "/request")
+    LIBREOFFICE_TIMEOUT: int = int(os.getenv("LIBREOFFICE_TIMEOUT", "30"))
+    LIBREOFFICE_MAX_RETRIES: int = int(os.getenv("LIBREOFFICE_MAX_RETRIES", "3"))
+    LIBREOFFICE_RETRY_DELAY: float = float(os.getenv("LIBREOFFICE_RETRY_DELAY", "1.0"))
+    
     # --- File Storage Settings ---
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     RESULTS_DIR: str = os.getenv("RESULTS_DIR", "./results")
