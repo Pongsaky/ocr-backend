@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Union
 from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 # Use timezone.utc instead of UTC for backward compatibility
 UTC = timezone.utc
@@ -29,6 +29,7 @@ class ProcessingMode(str, Enum):
 class ProcessingStep(str, Enum):
     """Processing steps for progress tracking."""
     UPLOAD = "upload"
+    URL_DOWNLOAD = "url_download"  # New step for URL downloads
     VALIDATION = "validation"
     CONVERSION = "conversion"  # For DOCX -> PDF
     IMAGE_EXTRACTION = "image_extraction"  # For PDF -> Images
@@ -40,7 +41,14 @@ class ProcessingStep(str, Enum):
 
 
 class UnifiedOCRRequest(BaseModel):
-    """Unified request model for all file types."""
+    """Unified request model for all file types with URL support."""
+    
+    # URL input support (alternative to file upload)
+    url: Optional[str] = Field(
+        default=None,
+        description="URL to download file from (Images and PDFs only). Alternative to file upload."
+    )
+    
     # Common parameters for all file types
     threshold: int = Field(
         default=500,
@@ -78,9 +86,32 @@ class UnifiedOCRRequest(BaseModel):
         default=ProcessingMode.BASIC,
         description="Processing mode: 'basic' or 'llm_enhanced'"
     )
+
+    @field_validator('url')
+    @classmethod
+    def validate_url_format(cls, v):
+        """Validate URL format and scheme."""
+        if v is not None:
+            import validators
+            if not validators.url(v):
+                raise ValueError("Invalid URL format")
+            
+            # Only allow http and https schemes
+            if not (v.startswith('http://') or v.startswith('https://')):
+                raise ValueError("Only HTTP and HTTPS URLs are supported")
+                
+        return v
+
+    @model_validator(mode='after')
+    def validate_input_method(self):
+        """Ensure URL is provided when using URL input method."""
+        # URL validation will be handled at the router level since we need access to the file parameter
+        # This validator just ensures URL format is correct if provided
+        return self
     
     model_config = ConfigDict(json_schema_extra={
         "example": {
+            "url": "https://example.com/document.pdf",
             "threshold": 500,
             "contrast_level": 1.3,
             "dpi": 300,
@@ -226,7 +257,7 @@ class UnifiedPageResult(BaseModel):
 class UnifiedStreamingStatus(BaseModel):
     """Unified streaming status for all file types."""
     task_id: str = Field(description="Unique task identifier")
-    file_type: FileType = Field(description="File type being processed")
+    file_type: Optional[FileType] = Field(default=None, description="File type being processed (None during URL download)")
     processing_mode: ProcessingMode = Field(description="Processing mode")
     status: str = Field(
         description="Processing status: 'processing', 'page_completed', 'completed', 'failed', 'cancelled'"

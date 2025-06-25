@@ -25,6 +25,7 @@ from app.models.unified_models import (
 from app.services.external_ocr_service import external_ocr_service
 from app.services.pdf_ocr_service import pdf_ocr_service
 from app.services.ocr_llm_service import ocr_llm_service
+from app.services.url_download_service import url_download_service, URLDownloadError
 from app.models.ocr_models import (
     OCRRequest, OCRLLMRequest, PDFOCRRequest, PDFLLMOCRRequest
 )
@@ -211,40 +212,92 @@ class UnifiedStreamProcessor:
     
     async def process_file_stream(
         self, 
-        file: UploadFile, 
+        file: Optional[UploadFile], 
         request: UnifiedOCRRequest,
         task_id: str
     ) -> UnifiedOCRResponse:
         """
         Process any supported file type with streaming.
+        Supports both file upload and URL download methods.
         
         Args:
-            file: Uploaded file
-            request: Unified processing parameters
+            file: Uploaded file (None for URL downloads)
+            request: Unified processing parameters (may contain URL)
             task_id: Unique task identifier
             
         Returns:
             UnifiedOCRResponse: Task response for streaming
         """
         start_time = time.time()
+        file_path = None
+        download_metadata = None
         
         try:
-            # Step 1: Detect file type
+            # Step 1: Handle URL download if applicable
+            if request.url:
+                logger.info(f"🌐 Processing URL download for task {task_id}: {request.url}")
+                
+                # Create streaming queue early for URL download updates
+                streaming_queue = asyncio.Queue()
+                self.streaming_queues[task_id] = streaming_queue
+                
+                # Send initial download progress update
+                await self._send_progress_update(
+                    task_id, None, request.mode, "processing", 
+                    ProcessingStep.URL_DOWNLOAD, 5.0,
+                    f"Starting download from URL: {request.url}"
+                )
+                
+                try:
+                    file_path, download_metadata = await url_download_service.download_file(
+                        request.url, task_id
+                    )
+                    
+                    # Create a mock UploadFile object for downstream compatibility
+                    file = MockUploadFile(
+                        filename=download_metadata["downloaded_filename"],
+                        content_type=download_metadata["content_type"],
+                        size=download_metadata["file_size_bytes"]
+                    )
+                    
+                    await self._send_progress_update(
+                        task_id, None, request.mode, "processing",
+                        ProcessingStep.URL_DOWNLOAD, 15.0,
+                        f"Downloaded file: {file.filename} ({file.size:,} bytes)"
+                    )
+                    
+                except URLDownloadError as e:
+                    logger.error(f"❌ URL download failed for {task_id}: {e}")
+                    # Cleanup on download failure
+                    if task_id in self.streaming_queues:
+                        del self.streaming_queues[task_id]
+                    raise HTTPException(status_code=400, detail=str(e))
+            
+            # Step 2: Detect file type
             file_type = await self.file_detector.detect_file_type(file)
             logger.info(f"🎯 Processing {file_type.value} file: {file.filename}")
             
-            # Step 2: Validate file size
-            await self.file_detector.validate_file_size(file, file_type)
+            # Step 3: Validate file size (skip for URL downloads - already validated)
+            if not request.url:
+                await self.file_detector.validate_file_size(file, file_type)
             
-            # Step 3: Create streaming queue
-            streaming_queue = asyncio.Queue()
-            self.streaming_queues[task_id] = streaming_queue
+            # Step 4: Create streaming queue (if not already created for URL)
+            if not request.url:
+                streaming_queue = asyncio.Queue()
+                self.streaming_queues[task_id] = streaming_queue
             
-            # Step 4: Save uploaded file and extract metadata
-            file_path = await self._save_uploaded_file(file, task_id)
+            # Step 5: Save uploaded file (if not URL download)
+            if not request.url:
+                file_path = await self._save_uploaded_file(file, task_id)
+            
+            # Step 6: Extract metadata
             file_metadata = await self._extract_file_metadata(file, file_type, file_path)
             
-            # Step 5: Estimate processing time
+            # Add download info to metadata if applicable
+            if download_metadata:
+                file_metadata.original_filename = f"Downloaded: {download_metadata['original_url']}"
+            
+            # Step 7: Estimate processing time
             page_count = 1
             if file_type == FileType.PDF:
                 page_count = file_metadata.pdf_page_count or 1
@@ -255,16 +308,22 @@ class UnifiedStreamProcessor:
                 file_type, file.size, request.mode, page_count
             )
             
-            # Step 6: Store task metadata
+            # Add URL download time if applicable
+            if request.url:
+                estimated_duration += 5.0  # Add download overhead
+            
+            # Step 8: Store task metadata
             self.task_metadata[task_id] = {
                 "file_type": file_type,
                 "file_path": file_path,
                 "request": request,
                 "start_time": start_time,
-                "metadata": file_metadata
+                "metadata": file_metadata,
+                "from_url": bool(request.url),
+                "download_metadata": download_metadata
             }
             
-            # Step 7: Create initial response
+            # Step 9: Create initial response
             response = UnifiedOCRResponse(
                 task_id=task_id,
                 file_type=file_type,
@@ -275,24 +334,33 @@ class UnifiedStreamProcessor:
                 file_metadata=file_metadata
             )
             
-            # Step 8: Send initial progress update
-            await self._send_progress_update(
-                task_id, file_type, request.mode, "processing", 
-                ProcessingStep.UPLOAD, 5.0, "File uploaded successfully"
-            )
+            # Step 10: Send initial progress update (if not URL download)
+            if not request.url:
+                await self._send_progress_update(
+                    task_id, file_type, request.mode, "processing", 
+                    ProcessingStep.UPLOAD, 5.0, "File uploaded successfully"
+                )
             
-            # Step 9: Start async processing
+            # Step 11: Start async processing
             asyncio.create_task(
                 self._process_file_async(task_id, file_type, file_path, request)
             )
             
+            source_type = "URL" if request.url else "uploaded file"
             logger.info(
-                f"✅ Created {file_type.value} streaming task {task_id} "
+                f"✅ Created {file_type.value} streaming task {task_id} from {source_type} "
                 f"(mode: {request.mode.value}, estimated: {estimated_duration}s)"
             )
             
             return response
             
+        except HTTPException:
+            # Re-raise HTTP exceptions without wrapping
+            if task_id in self.streaming_queues:
+                del self.streaming_queues[task_id]
+            if task_id in self.task_metadata:
+                del self.task_metadata[task_id]
+            raise
         except Exception as e:
             logger.error(f"❌ Failed to start unified processing for {task_id}: {e}")
             
@@ -563,7 +631,7 @@ class UnifiedStreamProcessor:
     async def _send_progress_update(
         self,
         task_id: str,
-        file_type: FileType,
+        file_type: Optional[FileType],
         mode: ProcessingMode,
         status: str,
         step: ProcessingStep,
@@ -585,7 +653,7 @@ class UnifiedStreamProcessor:
         current_page = 1
         processed_pages = len(cumulative_results) if cumulative_results else 0
         
-        if metadata:
+        if metadata and file_type:
             if file_type == FileType.PDF and metadata.pdf_page_count:
                 total_pages = metadata.pdf_page_count
             elif file_type == FileType.DOCX and metadata.docx_page_count:
@@ -659,19 +727,33 @@ class UnifiedStreamProcessor:
         return metadata
     
     async def _cleanup_task(self, task_id: str):
-        """Cleanup task resources."""
+        """Cleanup task resources including URL download files."""
         try:
             # Remove from streaming queues immediately to stop streaming
             if task_id in self.streaming_queues:
                 del self.streaming_queues[task_id]
             
-            # Clean up uploaded file
+            # Clean up files
             if task_id in self.task_metadata:
                 task_meta = self.task_metadata[task_id]
                 file_path = task_meta.get("file_path")
+                from_url = task_meta.get("from_url", False)
+                download_metadata = task_meta.get("download_metadata")
+                
+                # Clean up main file
                 if file_path and Path(file_path).exists():
                     Path(file_path).unlink()
                     logger.debug(f"🗑️ Cleaned up file: {file_path}")
+                
+                # Clean up URL download directory if applicable
+                if from_url and download_metadata:
+                    temp_directory = download_metadata.get("temp_directory")
+                    if temp_directory:
+                        import shutil
+                        temp_dir_path = Path(temp_directory)
+                        if temp_dir_path.exists() and temp_dir_path.is_dir():
+                            shutil.rmtree(temp_dir_path)
+                            logger.debug(f"🗑️ Cleaned up URL download directory: {temp_directory}")
                 
                 # Mark task as completed but keep metadata for a grace period
                 # This prevents race conditions with cancellation requests
@@ -699,6 +781,15 @@ class UnifiedStreamProcessor:
                 
         except Exception as e:
             logger.error(f"Delayed cleanup error for {task_id}: {e}")
+
+
+class MockUploadFile:
+    """Mock UploadFile object for URL downloads to maintain compatibility."""
+    
+    def __init__(self, filename: str, content_type: str, size: int):
+        self.filename = filename
+        self.content_type = content_type
+        self.size = size
 
 
 # Singleton instance

@@ -108,6 +108,15 @@ class Settings(BaseSettings):
     TEMP_DIR: str = os.getenv("TEMP_DIR", "./tmp")  # Project-relative temp directory
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
 
+    # --- URL Download Settings ---
+    ENABLE_URL_PROCESSING: bool = os.getenv("ENABLE_URL_PROCESSING", "True").lower() in ("true", "1", "t")
+    URL_DOWNLOAD_CONNECT_TIMEOUT: int = int(os.getenv("URL_DOWNLOAD_CONNECT_TIMEOUT", "10"))  # 10 seconds
+    URL_DOWNLOAD_READ_TIMEOUT: int = int(os.getenv("URL_DOWNLOAD_READ_TIMEOUT", "60"))  # 60 seconds  
+    URL_DOWNLOAD_WRITE_TIMEOUT: int = int(os.getenv("URL_DOWNLOAD_WRITE_TIMEOUT", "60"))  # 60 seconds
+    URL_DOWNLOAD_POOL_TIMEOUT: int = int(os.getenv("URL_DOWNLOAD_POOL_TIMEOUT", "60"))  # 60 seconds
+    URL_DOWNLOAD_MAX_REDIRECTS: int = int(os.getenv("URL_DOWNLOAD_MAX_REDIRECTS", "5"))  # Max redirects
+    URL_DOWNLOAD_USER_AGENT: str = os.getenv("URL_DOWNLOAD_USER_AGENT", "OCR-Backend/1.0 (+https://github.com/your-org/ocr-backend)")
+
     # --- Processing Settings ---
     MAX_CONCURRENT_TASKS: int = int(os.getenv("MAX_CONCURRENT_TASKS", "5"))
     TASK_TIMEOUT: int = int(os.getenv("TASK_TIMEOUT", "300"))  # 5 minutes

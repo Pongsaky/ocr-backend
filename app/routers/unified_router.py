@@ -37,23 +37,28 @@ limiter = Limiter(key_func=get_remote_address)
 @router.post(
     "/ocr/process-stream",
     response_model=UnifiedOCRResponse,
-    summary="🌟 Universal OCR Processing with Streaming",
+    summary="🌟 Universal OCR Processing with Streaming + URL Support",
     description="""
-    ## 🎯 **One Endpoint for ALL File Types!**
+    ## 🎯 **One Endpoint for ALL File Types + URL Downloads!**
     
-    Upload **ANY** supported file type for streaming OCR processing with real-time updates.
+    Process files via **file upload** OR **URL download** for streaming OCR with real-time updates.
     
     ### 📁 **Supported File Types:**
     - **🖼️ Images**: JPG, PNG, BMP, TIFF, WebP (max 10MB)
     - **📄 PDFs**: PDF documents (max 10 pages, 50MB) 
-    - **📝 Documents**: DOCX files (max 25MB)
+    - **🚫 Documents**: DOCX processing is currently disabled
+    
+    ### 🌐 **Input Methods:**
+    - **📁 File Upload**: Traditional file upload (multipart/form-data)
+    - **🔗 URL Download**: Provide URL to download file automatically
     
     ### ⚙️ **Processing Features:**
     - **🔍 Auto File Type Detection**: Based on MIME type and extension
     - **🌊 Real-time Streaming**: Live progress updates via Server-Sent Events
     - **🧠 LLM Enhancement**: Optional AI-powered text improvement
-    - **📊 Progress Tracking**: Step-by-step processing updates
+    - **📊 Progress Tracking**: Step-by-step processing updates including URL download
     - **⚡ Intelligent Routing**: Optimized processing per file type
+    - **🛡️ Secure Downloads**: Validates file types and sizes during download
     
     ### 🔄 **Processing Modes:**
     - **`basic`**: Fast OCR processing only
@@ -64,10 +69,14 @@ limiter = Limiter(key_func=get_remote_address)
     
     ### 📝 **Example Usage:**
     ```bash
-    # Upload any file type
+    # Upload file
     curl -X POST "/v1/ocr/process-stream" \\
       -F "file=@document.pdf" \\
       -F "request={'mode': 'llm_enhanced', 'threshold': 500}"
+    
+    # Download from URL
+    curl -X POST "/v1/ocr/process-stream" \\
+      -F "request={'url': 'https://example.com/document.pdf', 'mode': 'basic'}"
     
     # Connect to streaming updates  
     curl -N "/v1/ocr/stream/{task_id}"
@@ -75,9 +84,21 @@ limiter = Limiter(key_func=get_remote_address)
     
     ### ✨ **Frontend Integration:**
     ```javascript
+    // File upload
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('request', JSON.stringify({mode: 'llm_enhanced'}));
+    
+    // URL download
+    const formData = new FormData();
+    formData.append('request', JSON.stringify({
+        url: 'https://example.com/image.jpg',
+        mode: 'basic'
+    }));
+    
     const response = await fetch('/v1/ocr/process-stream', {
         method: 'POST',
-        body: formData  // Any file type!
+        body: formData
     });
     
     const {task_id} = await response.json();
@@ -115,20 +136,21 @@ limiter = Limiter(key_func=get_remote_address)
 @limiter.limit(f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_PERIOD}minute")
 async def process_any_file_stream(
     request_data: str = Form(None, alias="request"),
-    file: UploadFile = File(..., description="Any supported file (Image/PDF/DOCX)"),
+    file: UploadFile = File(None, description="File upload (Image/PDF only) - alternative to URL"),
     request: Request = None
 ):
     """
-    🎯 **Universal OCR Processing Endpoint**
+    🎯 **Universal OCR Processing Endpoint with URL Support**
     
-    Upload any supported file and get real-time streaming updates.
+    Process files via file upload OR URL download with real-time streaming updates.
     The backend automatically:
-    1. 🔍 Detects file type (image/PDF/DOCX)
-    2. ⚙️ Applies appropriate processing pipeline  
-    3. 🌊 Provides streaming updates via SSE
-    4. 📊 Returns results in unified format
+    1. 📥 Accepts file upload OR URL download
+    2. 🔍 Detects file type (Images/PDFs only, DOCX disabled)
+    3. ⚙️ Applies appropriate processing pipeline  
+    4. 🌊 Provides streaming updates via SSE
+    5. 📊 Returns results in unified format
     
-    **Perfect for frontend developers** - no need to worry about file types!
+    **Perfect for frontend developers** - supports both upload and URL methods!
     """
     task_id = str(uuid.uuid4())
     
@@ -138,25 +160,57 @@ async def process_any_file_stream(
         if request_data:
             unified_request = UnifiedOCRRequest.model_validate_json(request_data)
         
-        logger.info(
-            f"🚀 Starting UNIFIED streaming task {task_id} for file: {file.filename} "
-            f"(size: {file.size:,} bytes, MIME: {file.content_type})"
-        )
+        # Validate input method (either file upload OR URL, not both)
+        has_file = file is not None and file.filename
+        has_url = unified_request.url is not None
         
-        # Process with unified processor (auto-detects file type)
+        if not has_file and not has_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Either 'file' upload or 'url' in request data must be provided"
+            )
+        
+        if has_file and has_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide either 'file' upload OR 'url', not both"
+            )
+        
+        # Check if URL processing is enabled
+        if has_url and not settings.ENABLE_URL_PROCESSING:
+            raise HTTPException(
+                status_code=400,
+                detail="URL processing is currently disabled"
+            )
+        
+        if has_file:
+            logger.info(
+                f"🚀 Starting UNIFIED streaming task {task_id} for uploaded file: {file.filename} "
+                f"(size: {file.size:,} bytes, MIME: {file.content_type})"
+            )
+        else:
+            logger.info(
+                f"🚀 Starting UNIFIED streaming task {task_id} for URL: {unified_request.url}"
+            )
+        
+        # Process with unified processor (handles both file upload and URL)
         response = await unified_processor.process_file_stream(
             file=file,
             request=unified_request,
             task_id=task_id
         )
         
+        source_type = "uploaded file" if has_file else "URL"
         logger.info(
-            f"✅ Created {response.file_type.value} streaming task {task_id} "
+            f"✅ Created {response.file_type.value} streaming task {task_id} from {source_type} "
             f"(mode: {response.processing_mode.value}, estimated: {response.estimated_duration}s)"
         )
         
         return response
         
+    except HTTPException:
+        # Re-raise HTTP exceptions without wrapping
+        raise
     except Exception as e:
         logger.error(f"❌ Unified streaming failed for {task_id}: {e}")
         raise HTTPException(
