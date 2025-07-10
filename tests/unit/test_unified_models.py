@@ -11,7 +11,7 @@ from app.models.unified_models import (
     UnifiedOCRRequest, UnifiedOCRResponse, 
     UnifiedPageResult, UnifiedStreamingStatus,
     FileMetadata, UnifiedTaskCancellationRequest,
-    UnifiedTaskCancellationResponse
+    UnifiedTaskCancellationResponse, PDFConfig
 )
 
 UTC = timezone.utc
@@ -328,4 +328,63 @@ def test_json_round_trip_all_models():
         restored_dict = restored.model_dump()
         
         # Check that both have the same keys
-        assert set(original_dict.keys()) == set(restored_dict.keys()) 
+        assert set(original_dict.keys()) == set(restored_dict.keys())
+
+
+# --- PDF Configuration Tests ---
+
+def test_pdf_config_defaults():
+    """Test PDFConfig default values."""
+    config = PDFConfig()
+    assert config.page_select is None
+
+
+def test_pdf_config_valid_page_select():
+    """Test PDFConfig with valid page selection."""
+    config = PDFConfig(page_select=[1, 3, 5])
+    assert config.page_select == [1, 3, 5]
+
+
+def test_pdf_config_page_select_sorting():
+    """Test PDFConfig sorts page selection."""
+    config = PDFConfig(page_select=[5, 1, 3])
+    assert config.page_select == [1, 3, 5]
+
+
+def test_pdf_config_empty_page_select():
+    """Test PDFConfig rejects empty page selection."""
+    with pytest.raises(ValueError, match="page_select cannot be empty if provided"):
+        PDFConfig(page_select=[])
+
+
+def test_pdf_config_invalid_page_numbers():
+    """Test PDFConfig rejects invalid page numbers."""
+    with pytest.raises(ValueError, match="Page numbers must be 1-indexed"):
+        PDFConfig(page_select=[0, 1, 2])
+
+
+def test_pdf_config_duplicate_page_numbers():
+    """Test PDFConfig rejects duplicate page numbers."""
+    with pytest.raises(ValueError, match="Duplicate page numbers are not allowed"):
+        PDFConfig(page_select=[1, 2, 2, 3])
+
+
+def test_pdf_config_negative_page_numbers():
+    """Test PDFConfig rejects negative page numbers."""
+    with pytest.raises(ValueError, match="Page numbers must be 1-indexed"):
+        PDFConfig(page_select=[-1, 1, 2])
+
+
+def test_unified_ocr_request_with_pdf_config():
+    """Test UnifiedOCRRequest with pdf_config field."""
+    pdf_config = PDFConfig(page_select=[1, 3, 5])
+    request = UnifiedOCRRequest(pdf_config=pdf_config)
+    
+    assert request.pdf_config is not None
+    assert request.pdf_config.page_select == [1, 3, 5]
+
+
+def test_unified_ocr_request_without_pdf_config():
+    """Test UnifiedOCRRequest without pdf_config field."""
+    request = UnifiedOCRRequest()
+    assert request.pdf_config is None 

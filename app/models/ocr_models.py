@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict, validator
+from pydantic import BaseModel, Field, ConfigDict, validator, field_validator
 
 
 class OCRRequest(BaseModel):
@@ -325,6 +325,25 @@ class PDFOCRRequest(BaseModel):
         le=600,
         description="DPI for PDF to image conversion (150-600)"
     )
+    page_select: Optional[List[int]] = Field(
+        default=None,
+        description="List of page numbers to process (1-indexed). If None, processes all pages."
+    )
+    
+    @field_validator('page_select')
+    @classmethod
+    def validate_page_select(cls, v):
+        """Validate page selection parameters."""
+        if v is not None:
+            if not v:  # Empty list
+                raise ValueError("page_select cannot be empty if provided")
+            if any(page < 1 for page in v):
+                raise ValueError("Page numbers must be 1-indexed (start from 1)")
+            if len(v) != len(set(v)):
+                raise ValueError("Duplicate page numbers are not allowed")
+            # Return sorted list to ensure consistent processing order
+            return sorted(v)
+        return v
     
     class Config:
         """Pydantic model configuration."""
@@ -332,7 +351,8 @@ class PDFOCRRequest(BaseModel):
             "example": {
                 "threshold": 500,
                 "contrast_level": 1.3,
-                "dpi": 300
+                "dpi": 300,
+                "page_select": [1, 3, 5]
             }
         }
 
@@ -481,6 +501,25 @@ class PDFLLMOCRRequest(BaseModel):
         default=None,
         description="LLM model to use (uses default if not provided)"
     )
+    page_select: Optional[List[int]] = Field(
+        default=None,
+        description="List of page numbers to process (1-indexed). If None, processes all pages."
+    )
+    
+    @field_validator('page_select')
+    @classmethod
+    def validate_page_select(cls, v):
+        """Validate page selection parameters."""
+        if v is not None:
+            if not v:  # Empty list
+                raise ValueError("page_select cannot be empty if provided")
+            if any(page < 1 for page in v):
+                raise ValueError("Page numbers must be 1-indexed (start from 1)")
+            if len(v) != len(set(v)):
+                raise ValueError("Duplicate page numbers are not allowed")
+            # Return sorted list to ensure consistent processing order
+            return sorted(v)
+        return v
     
     class Config:
         """Pydantic model configuration."""
@@ -490,7 +529,8 @@ class PDFLLMOCRRequest(BaseModel):
                 "contrast_level": 1.3,
                 "dpi": 300,
                 "prompt": "อ่านข้อความในภาพนี้",
-                "model": "nectec/Pathumma-vision-ocr-lora-dev"
+                "model": "nectec/Pathumma-vision-ocr-lora-dev",
+                "page_select": [1, 3, 5]
             }
         }
 

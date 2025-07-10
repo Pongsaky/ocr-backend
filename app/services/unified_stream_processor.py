@@ -526,7 +526,8 @@ class UnifiedStreamProcessor:
                 pdf_request = PDFOCRRequest(
                     threshold=request.threshold,
                     contrast_level=request.contrast_level,
-                    dpi=request.dpi or 300
+                    dpi=request.dpi or 300,
+                    page_select=request.pdf_config.page_select if request.pdf_config else None
                 )
                 
                 # Use existing PDF streaming service
@@ -540,7 +541,8 @@ class UnifiedStreamProcessor:
                     contrast_level=request.contrast_level,
                     dpi=request.dpi or 300,
                     prompt=request.prompt,
-                    model=request.model
+                    model=request.model,
+                    page_select=request.pdf_config.page_select if request.pdf_config else None
                 )
                 
                 # Use existing PDF LLM streaming service

@@ -69,9 +69,16 @@ The codebase follows a clean layered architecture:
 
 ### API Endpoints Structure
 Main endpoints:
-1. **POST** `/v1/ocr/process-stream` - Create OCR processing task
+1. **POST** `/v1/ocr/process-stream` - Create OCR processing task (supports PDF page selection)
 2. **GET** `/v1/ocr/process-stream/{task_id}` - Get task status and results
 3. **POST** `/v1/ocr/tasks/{task_id}/cancel` - Cancel running task
+
+#### PDF Page Selection Feature
+The unified API now supports selective PDF page processing:
+- **Field**: `pdf_config.page_select` - Array of 1-indexed page numbers
+- **Validation**: Pages must exist, no duplicates, automatically sorted
+- **Default**: Processes all pages if not specified
+- **Examples**: `[1]`, `[1, 3, 5]`, `[2, 4, 6, 8, 10]`
 
 ### External Service Integration
 1. **Vision World API**: Standard OCR processing (`VISION_WORLD_API_URL` env var)
@@ -110,6 +117,94 @@ Key environment variables (see `.env.example`):
 ### Performance Considerations
 - Image scaling for LLM processing (1024px max dimension)
 - Batch processing for multi-page PDFs
+- PDF page selection for reduced processing time and costs
 - Connection pooling for external APIs
 - Async file operations with `aiofiles`
 - Server-sent events for real-time status updates
+
+## API Usage Examples
+
+### PDF Page Selection
+
+#### Basic Usage
+```bash
+# Process specific pages (1, 3, 5) with basic OCR
+curl -X POST "/v1/ocr/process-stream" \
+  -F "file=@document.pdf" \
+  -F "request={
+    'mode': 'basic',
+    'pdf_config': {
+      'page_select': [1, 3, 5]
+    }
+  }"
+```
+
+#### Advanced Usage with LLM Enhancement
+```bash
+# Process pages 2, 4, 6 with LLM enhancement
+curl -X POST "/v1/ocr/process-stream" \
+  -F "file=@document.pdf" \
+  -F "request={
+    'mode': 'llm_enhanced',
+    'threshold': 500,
+    'contrast_level': 1.3,
+    'dpi': 300,
+    'prompt': 'Extract text accurately from this document',
+    'pdf_config': {
+      'page_select': [2, 4, 6]
+    }
+  }"
+```
+
+#### URL Download with Page Selection
+```bash
+# Download PDF from URL and process specific pages
+curl -X POST "/v1/ocr/process-stream" \
+  -F "request={
+    'url': 'https://example.com/document.pdf',
+    'mode': 'llm_enhanced',
+    'pdf_config': {
+      'page_select': [1, 10, 20]
+    }
+  }"
+```
+
+#### Frontend Integration
+```javascript
+// React/JavaScript example
+const processSpecificPages = async (file, pages) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('request', JSON.stringify({
+    mode: 'llm_enhanced',
+    pdf_config: {
+      page_select: pages  // e.g., [1, 3, 5]
+    }
+  }));
+
+  const response = await fetch('/v1/ocr/process-stream', {
+    method: 'POST',
+    body: formData
+  });
+
+  const { task_id } = await response.json();
+  
+  // Connect to streaming updates
+  const eventSource = new EventSource(`/v1/ocr/stream/${task_id}`);
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    console.log('Progress:', data.progress_percentage + '%');
+    console.log('Current page:', data.current_page);
+  };
+};
+```
+
+### Page Selection Rules
+- **Pages are 1-indexed**: First page = 1, second page = 2, etc.
+- **Automatic sorting**: Pages processed in ascending order regardless of input order
+- **Validation**: 
+  - Pages must exist in the PDF
+  - No duplicate page numbers allowed
+  - Empty arrays are rejected
+- **Performance**: Only selected pages are converted to images and processed
+- **Streaming**: Real-time updates show progress for selected pages only

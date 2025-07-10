@@ -154,7 +154,7 @@ class PDFOCRService:
                 
                 # 2. Convert PDF to images
                 pdf_start_time = time.time()
-                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context, request.page_select)
                 pdf_processing_time = time.time() - pdf_start_time
                 
                 logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
@@ -248,7 +248,8 @@ class PDFOCRService:
         self, 
         pdf_path: Path, 
         dpi: int, 
-        context: PDFProcessingContext
+        context: PDFProcessingContext,
+        page_select: Optional[List[int]] = None
     ) -> List[Path]:
         """
         Convert PDF pages to images with automatic scaling for LLM context limits.
@@ -257,6 +258,7 @@ class PDFOCRService:
             pdf_path: Path to PDF file
             dpi: DPI for image conversion
             context: Processing context for resource management
+            page_select: List of page numbers to process (1-indexed). If None, processes all pages.
             
         Returns:
             List[Path]: Paths to temporary image files (scaled if necessary)
@@ -274,9 +276,23 @@ class PDFOCRService:
             temp_dir.mkdir(parents=True, exist_ok=True)
             context.add_temp_file(temp_dir)
             
-            # Convert each page to image
-            for page_num in range(len(doc)):
-                page = doc.load_page(page_num)
+            # Determine which pages to process
+            total_pages = len(doc)
+            if page_select is None:
+                # Process all pages
+                pages_to_process = list(range(1, total_pages + 1))
+            else:
+                # Validate selected pages exist
+                invalid_pages = [p for p in page_select if p > total_pages]
+                if invalid_pages:
+                    raise ValueError(f"Invalid page numbers: {invalid_pages}. PDF only has {total_pages} pages.")
+                pages_to_process = page_select
+            
+            logger.info(f"Processing {len(pages_to_process)} pages out of {total_pages} total pages")
+            
+            # Convert selected pages to images
+            for page_num in pages_to_process:
+                page = doc.load_page(page_num - 1)  # Convert to 0-indexed
                 
                 # Create matrix for DPI scaling
                 mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
@@ -284,19 +300,19 @@ class PDFOCRService:
                 # Render page to pixmap
                 pix = page.get_pixmap(matrix=mat)
                 
-                # Save as PNG (original)
-                original_img_path = temp_dir / f"page_{page_num + 1:03d}_original.png"
+                # Save as PNG (original) - use original page number
+                original_img_path = temp_dir / f"page_{page_num:03d}_original.png"
                 pix.save(str(original_img_path))
                 context.add_temp_file(original_img_path)
                 
                 # Clean up pixmap
                 pix = None
                 
-                logger.debug(f"Converted PDF page {page_num + 1} to {original_img_path}")
+                logger.debug(f"Converted PDF page {page_num} to {original_img_path}")
                 
                 # Validate and scale image if necessary
                 try:
-                    scaled_img_path = temp_dir / f"page_{page_num + 1:03d}.png"
+                    scaled_img_path = temp_dir / f"page_{page_num:03d}.png"
                     final_img_path, scaling_metadata = validate_and_scale_image(
                         original_img_path, 
                         scaled_img_path
@@ -309,17 +325,17 @@ class PDFOCRService:
                         scale_factor = scaling_metadata.get("scale_factor", 1.0)
                         
                         logger.info(
-                            f"Page {page_num + 1} scaled: {original_pixels:,} -> {scaled_pixels:,} pixels "
+                            f"Page {page_num} scaled: {original_pixels:,} -> {scaled_pixels:,} pixels "
                             f"(factor: {scale_factor:.3f})"
                         )
                     else:
-                        logger.debug(f"Page {page_num + 1} within limits, no scaling needed")
+                        logger.debug(f"Page {page_num} within limits, no scaling needed")
                     
                     temp_images.append(final_img_path)
                     context.add_temp_file(final_img_path)
                     
                 except ImageProcessingError as e:
-                    logger.error(f"Failed to process image for page {page_num + 1}: {str(e)}")
+                    logger.error(f"Failed to process image for page {page_num}: {str(e)}")
                     # Fall back to original image if scaling fails
                     temp_images.append(original_img_path)
                 
@@ -511,7 +527,7 @@ class PDFOCRService:
                 
                 # 2. Convert PDF to images
                 pdf_start_time = time.time()
-                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context, request.page_select)
                 pdf_processing_time = time.time() - pdf_start_time
                 
                 logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
@@ -807,7 +823,7 @@ class PDFOCRService:
                 
                 # 2. Convert PDF to images
                 pdf_start_time = time.time()
-                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context, request.page_select)
                 pdf_processing_time = time.time() - pdf_start_time
                 
                 logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")
@@ -950,7 +966,7 @@ class PDFOCRService:
                 
                 # 2. Convert PDF to images
                 pdf_start_time = time.time()
-                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context)
+                temp_images = await self._pdf_to_images(pdf_path, request.dpi, context, request.page_select)
                 pdf_processing_time = time.time() - pdf_start_time
                 
                 logger.info(f"Converted PDF to {len(temp_images)} images in {pdf_processing_time:.2f}s")

@@ -59,6 +59,7 @@ limiter = Limiter(key_func=get_remote_address)
     - **📊 Progress Tracking**: Step-by-step processing updates including URL download
     - **⚡ Intelligent Routing**: Optimized processing per file type
     - **🛡️ Secure Downloads**: Validates file types and sizes during download
+    - **📄 PDF Page Selection**: Process specific pages only (e.g., pages 1, 3, 5)
     
     ### 🔄 **Processing Modes:**
     - **`basic`**: Fast OCR processing only
@@ -69,14 +70,19 @@ limiter = Limiter(key_func=get_remote_address)
     
     ### 📝 **Example Usage:**
     ```bash
-    # Upload file
+    # Upload file (all pages)
     curl -X POST "/v1/ocr/process-stream" \\
       -F "file=@document.pdf" \\
       -F "request={'mode': 'llm_enhanced', 'threshold': 500}"
     
-    # Download from URL
+    # Upload file with specific pages
     curl -X POST "/v1/ocr/process-stream" \\
-      -F "request={'url': 'https://example.com/document.pdf', 'mode': 'basic'}"
+      -F "file=@document.pdf" \\
+      -F "request={'mode': 'basic', 'pdf_config': {'page_select': [1, 3, 5]}}"
+    
+    # Download from URL with page selection
+    curl -X POST "/v1/ocr/process-stream" \\
+      -F "request={'url': 'https://example.com/document.pdf', 'mode': 'llm_enhanced', 'pdf_config': {'page_select': [2, 4]}}"
     
     # Connect to streaming updates  
     curl -N "/v1/ocr/stream/{task_id}"
@@ -84,16 +90,24 @@ limiter = Limiter(key_func=get_remote_address)
     
     ### ✨ **Frontend Integration:**
     ```javascript
-    // File upload
+    // File upload with page selection
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
-    formData.append('request', JSON.stringify({mode: 'llm_enhanced'}));
+    formData.append('request', JSON.stringify({
+        mode: 'llm_enhanced',
+        pdf_config: {
+            page_select: [1, 3, 5]  // Process pages 1, 3, 5 only
+        }
+    }));
     
-    // URL download
+    // URL download with page selection
     const formData = new FormData();
     formData.append('request', JSON.stringify({
-        url: 'https://example.com/image.jpg',
-        mode: 'basic'
+        url: 'https://example.com/document.pdf',
+        mode: 'basic',
+        pdf_config: {
+            page_select: [2, 4, 6]  // Process pages 2, 4, 6 only
+        }
     }));
     
     const response = await fetch('/v1/ocr/process-stream', {
@@ -104,6 +118,13 @@ limiter = Limiter(key_func=get_remote_address)
     const {task_id} = await response.json();
     const eventSource = new EventSource(`/v1/ocr/stream/${task_id}`);
     ```
+    
+    ### 📄 **PDF Page Selection Guide:**
+    - **`page_select`**: Array of page numbers (1-indexed)
+    - **Validation**: Pages must exist, no duplicates, no empty arrays
+    - **Auto-sorting**: Pages processed in ascending order
+    - **Default**: If not provided, processes all pages
+    - **Examples**: `[1]`, `[1, 3, 5]`, `[2, 4, 6, 8, 10]`
     """,
     responses={
         200: {

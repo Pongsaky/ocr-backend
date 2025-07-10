@@ -40,6 +40,35 @@ class ProcessingStep(str, Enum):
     CANCELLED = "cancelled"
 
 
+class PDFConfig(BaseModel):
+    """PDF-specific configuration options."""
+    page_select: Optional[List[int]] = Field(
+        default=None,
+        description="List of page numbers to process (1-indexed). If None, processes all pages."
+    )
+    
+    @field_validator('page_select')
+    @classmethod
+    def validate_page_select(cls, v):
+        """Validate page selection parameters."""
+        if v is not None:
+            if not v:  # Empty list
+                raise ValueError("page_select cannot be empty if provided")
+            if any(page < 1 for page in v):
+                raise ValueError("Page numbers must be 1-indexed (start from 1)")
+            if len(v) != len(set(v)):
+                raise ValueError("Duplicate page numbers are not allowed")
+            # Return sorted list to ensure consistent processing order
+            return sorted(v)
+        return v
+    
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "page_select": [1, 3, 5]
+        }
+    })
+
+
 class UnifiedOCRRequest(BaseModel):
     """Unified request model for all file types with URL support."""
     
@@ -86,6 +115,12 @@ class UnifiedOCRRequest(BaseModel):
         default=ProcessingMode.BASIC,
         description="Processing mode: 'basic' or 'llm_enhanced'"
     )
+    
+    # PDF-specific configuration
+    pdf_config: Optional[PDFConfig] = Field(
+        default=None,
+        description="PDF-specific configuration options (PDF files only)"
+    )
 
     @field_validator('url')
     @classmethod
@@ -117,7 +152,10 @@ class UnifiedOCRRequest(BaseModel):
             "dpi": 300,
             "mode": "llm_enhanced",
             "prompt": "Extract text from this document accurately",
-            "model": "gpt-4-vision-preview"
+            "model": "gpt-4-vision-preview",
+            "pdf_config": {
+                "page_select": [1, 3, 5]
+            }
         }
     })
 
