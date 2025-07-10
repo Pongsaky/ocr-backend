@@ -13,7 +13,7 @@ This guide provides everything frontend developers need to integrate with the OC
 
 ### **Processing Modes**
 - `basic` - Standard OCR processing (faster)
-- `llm_enhanced` - AI-enhanced text extraction (higher accuracy, slower)
+- `llm_enhanced` - AI-enhanced text extraction (higher accuracy, slower, supports text streaming)
 
 ### **Base URL**
 ```
@@ -29,10 +29,13 @@ https://your-api.com     # Production
 
 ```javascript
 // Upload file and start processing
-const uploadFile = async (file, mode = 'basic') => {
+const uploadFile = async (file, mode = 'basic', enableStreaming = false) => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('request', JSON.stringify({ mode }));
+  formData.append('request', JSON.stringify({ 
+    mode,
+    stream: enableStreaming && mode === 'llm_enhanced' // Only works with LLM mode
+  }));
 
   const response = await fetch('/v1/ocr/process-stream', {
     method: 'POST',
@@ -85,6 +88,16 @@ const streamResults = (taskId, onUpdate, onComplete, onError) => {
         return;
       }
 
+      // Handle real-time text streaming (when stream: true)
+      if (data.text_chunk) {
+        onUpdate({
+          type: 'text_stream',
+          text_chunk: data.text_chunk,
+          accumulated_text: data.accumulated_text
+        });
+        return;
+      }
+
       // Handle progress updates
       onUpdate(data);
 
@@ -111,14 +124,16 @@ const streamResults = (taskId, onUpdate, onComplete, onError) => {
 };
 ```
 
-### **Step 3: Handle Streaming Updates**
+### **Step 3: Handle Different Types of Streaming Updates**
 
-**Progress Update Format**:
+When streaming is enabled (`stream: true`), you'll receive several different types of updates:
+
+#### **Type 1: Regular Progress Updates**
 ```json
 {
   "task_id": "abc123-def456-ghi789",
   "file_type": "pdf",
-  "processing_mode": "basic",
+  "processing_mode": "llm_enhanced",
   "status": "processing",
   "current_step": "ocr_processing",
   "progress_percentage": 45.5,
@@ -126,26 +141,120 @@ const streamResults = (taskId, onUpdate, onComplete, onError) => {
   "total_pages": 5,
   "processed_pages": 2,
   "failed_pages": 0,
+  "estimated_time_remaining": 12.5,
+  "timestamp": "2025-01-15T10:30:15Z"
+}
+```
+
+#### **Type 2: Real-time Text Streaming Updates** (when `stream: true`)
+```json
+{
+  "task_id": "abc123-def456-ghi789",
+  "status": "processing",
+  "current_step": "llm_enhancement",
+  "current_page": 3,
+  "text_chunk": "ข",
+  "accumulated_text": "ข้อความในเอกสารนี้คือ ข",
+  "timestamp": "2025-01-15T10:30:16Z"
+}
+
+{
+  "task_id": "abc123-def456-ghi789", 
+  "status": "processing",
+  "current_step": "llm_enhancement",
+  "current_page": 3,
+  "text_chunk": "้",
+  "accumulated_text": "ข้อความในเอกสารนี้คือ ข้",
+  "timestamp": "2025-01-15T10:30:16Z"
+}
+```
+
+#### **Type 3: Page Completion Updates**
+```json
+{
+  "task_id": "abc123-def456-ghi789",
+  "status": "page_completed",
+  "current_step": "ocr_processing",
+  "progress_percentage": 60.0,
+  "current_page": 3,
+  "total_pages": 5,
+  "processed_pages": 3,
+  "failed_pages": 0,
   "latest_page_result": {
-    "page_number": 2,
-    "extracted_text": "Page 2 content...",
-    "processing_time": 1.23,
-    "success": true
+    "page_number": 3,
+    "extracted_text": "Complete text from page 3...",
+    "processing_time": 2.8,
+    "success": true,
+    "threshold_used": 500,
+    "contrast_level_used": 1.3,
+    "image_processing_time": 1.1,
+    "llm_processing_time": 1.7,
+    "model_used": "nectec/Pathumma-vision-ocr-lora-dev"
   },
   "cumulative_results": [
     {
       "page_number": 1,
       "extracted_text": "Page 1 content...",
+      "processing_time": 2.1,
       "success": true
     },
     {
-      "page_number": 2,
+      "page_number": 2, 
       "extracted_text": "Page 2 content...",
+      "processing_time": 2.3,
+      "success": true
+    },
+    {
+      "page_number": 3,
+      "extracted_text": "Complete text from page 3...",
+      "processing_time": 2.8,
       "success": true
     }
   ],
-  "estimated_time_remaining": 12.5,
-  "timestamp": "2025-01-15T10:30:15Z"
+  "estimated_time_remaining": 8.2,
+  "processing_speed": 0.42,
+  "timestamp": "2025-01-15T10:30:18Z"
+}
+```
+
+#### **Type 4: Final Completion**
+```json
+{
+  "task_id": "abc123-def456-ghi789",
+  "status": "completed",
+  "current_step": "completed",
+  "progress_percentage": 100.0,
+  "current_page": 5,
+  "total_pages": 5,
+  "processed_pages": 5,
+  "failed_pages": 0,
+  "cumulative_results": [
+    // ... all page results
+  ],
+  "processing_speed": 0.38,
+  "timestamp": "2025-01-15T10:30:25Z"
+}
+```
+
+#### **Type 5: Heartbeat Messages**
+```json
+{
+  "heartbeat": true,
+  "timestamp": "2025-01-15T10:30:20Z"
+}
+```
+
+#### **Type 6: Error Updates**
+```json
+{
+  "task_id": "abc123-def456-ghi789",
+  "status": "failed",
+  "current_step": "failed",
+  "progress_percentage": 40.0,
+  "processed_pages": 2,
+  "failed_pages": 3,
+  "error_message": "LLM processing failed: API timeout",
+  "timestamp": "2025-01-15T10:30:22Z"
 }
 ```
 
@@ -161,16 +270,22 @@ const OCRProcessor = () => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState([]);
   const [error, setError] = useState(null);
+  const [streamingText, setStreamingText] = useState('');
+  const [enableStreaming, setEnableStreaming] = useState(false);
 
   // File upload handler
   const handleFileUpload = useCallback(async (selectedFile, mode = 'basic') => {
     try {
       setStatus('uploading');
       setError(null);
+      setStreamingText('');
       
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('request', JSON.stringify({ mode }));
+      formData.append('request', JSON.stringify({ 
+        mode,
+        stream: enableStreaming && mode === 'llm_enhanced'
+      }));
 
       const response = await fetch('/v1/ocr/process-stream', {
         method: 'POST',
@@ -193,7 +308,7 @@ const OCRProcessor = () => {
       setError(err.message);
       setStatus('error');
     }
-  }, []);
+  }, [enableStreaming]);
 
   // Streaming connection
   const connectToStream = useCallback((id) => {
@@ -204,6 +319,12 @@ const OCRProcessor = () => {
         const data = JSON.parse(event.data);
         
         if (data.heartbeat) return;
+
+        // Handle real-time text streaming
+        if (data.text_chunk) {
+          setStreamingText(data.accumulated_text || '');
+          return;
+        }
 
         // Update progress
         setProgress(data.progress_percentage || 0);
@@ -268,6 +389,17 @@ const OCRProcessor = () => {
         <option value="llm_enhanced">AI Enhanced</option>
       </select>
       
+      {/* Streaming Toggle (only for LLM mode) */}
+      <label>
+        <input
+          type="checkbox"
+          checked={enableStreaming}
+          onChange={(e) => setEnableStreaming(e.target.checked)}
+          disabled={status === 'processing'}
+        />
+        Enable real-time text streaming (AI mode only)
+      </label>
+      
       {/* Process Button */}
       <button
         onClick={() => file && handleFileUpload(file, document.getElementById('mode').value)}
@@ -296,6 +428,14 @@ const OCRProcessor = () => {
       {error && (
         <div className="error-message">
           Error: {error}
+        </div>
+      )}
+      
+      {/* Streaming Text Display */}
+      {streamingText && status === 'processing' && (
+        <div className="streaming-text">
+          <h3>Live Text Extraction:</h3>
+          <pre>{streamingText}<span className="cursor">▊</span></pre>
         </div>
       )}
       
@@ -529,6 +669,9 @@ export interface StreamingUpdate {
   estimated_time_remaining?: number;
   error_message?: string;
   timestamp: string;
+  // Text streaming fields (when stream: true)
+  text_chunk?: string;
+  accumulated_text?: string;
 }
 
 export interface PageResult {
@@ -550,14 +693,110 @@ export interface FileMetadata {
 }
 ```
 
+## 🌟 **Real-time Text Streaming Example**
+
+### **Advanced Streaming Implementation**
+
+```javascript
+// Enhanced component with real-time text streaming
+const StreamingOCRExample = () => {
+  const [streamingChunks, setStreamingChunks] = useState([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  const processWithTextStreaming = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('request', JSON.stringify({
+      mode: 'llm_enhanced',
+      stream: true,  // Enable character-by-character streaming
+      prompt: 'Extract all text accurately'
+    }));
+    
+    const response = await fetch('/v1/ocr/process-stream', {
+      method: 'POST',
+      body: formData
+    });
+    
+    const { task_id } = await response.json();
+    
+    // Connect to streaming
+    const eventSource = new EventSource(`/v1/ocr/stream/${task_id}`);
+    setIsStreaming(true);
+    
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.text_chunk) {
+        // Animate text appearance
+        setStreamingChunks(prev => [...prev, data.text_chunk]);
+      }
+      
+      if (data.status === 'completed') {
+        setIsStreaming(false);
+        eventSource.close();
+      }
+    };
+  };
+  
+  return (
+    <div>
+      {isStreaming && (
+        <div className="streaming-container">
+          {streamingChunks.map((chunk, i) => (
+            <span 
+              key={i} 
+              className="text-chunk"
+              style={{
+                animationDelay: `${i * 0.05}s`,
+                opacity: 0,
+                animation: 'fadeIn 0.3s forwards'
+              }}
+            >
+              {chunk}
+            </span>
+          ))}
+          <span className="typing-cursor">|</span>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+### **CSS for Streaming Animation**
+
+```css
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
+
+.typing-cursor {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.streaming-container {
+  font-family: monospace;
+  line-height: 1.6;
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+```
+
 ## 🎯 **Summary**
 
 This OCR API provides:
 - ✅ **Simple Upload**: Single endpoint for all file types
 - ✅ **Real-time Progress**: Server-Sent Events streaming
+- ✅ **Character-by-Character Text Streaming**: Live text output for LLM mode
 - ✅ **Flexible Processing**: Basic and AI-enhanced modes
 - ✅ **Error Handling**: Clear error messages and status codes
 - ✅ **Task Management**: Cancel processing anytime
 - ✅ **Type Safety**: Full TypeScript support
 
-Perfect for building responsive, user-friendly OCR applications! 🚀 
+Perfect for building responsive, user-friendly OCR applications with real-time feedback! 🚀 

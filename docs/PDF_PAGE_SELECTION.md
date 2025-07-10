@@ -28,6 +28,7 @@ The PDF Page Selection feature allows users to process specific pages of a PDF d
   "dpi": 300,
   "prompt": "optional custom prompt",
   "model": "optional model name",
+  "stream": false,  // Enable real-time text streaming (LLM mode only)
   "pdf_config": {
     "page_select": [1, 3, 5]  // Array of page numbers (1-indexed)
   }
@@ -66,27 +67,51 @@ curl -X POST "/v1/ocr/process-stream" \
   }"
 ```
 
-#### 3. URL Download with Page Selection
+#### 2a. LLM Enhanced OCR with Text Streaming
+
+```bash
+# Enable real-time text streaming for better UX
+curl -X POST "/v1/ocr/process-stream" \
+  -F "file=@document.pdf" \
+  -F "request={
+    'mode': 'llm_enhanced',
+    'stream': true,
+    'threshold': 500,
+    'contrast_level': 1.3,
+    'dpi': 300,
+    'prompt': 'Extract text accurately',
+    'pdf_config': {
+      'page_select': [2, 4, 6]
+    }
+  }"
+
+# Then connect to streaming endpoint for real-time text
+curl -N "http://localhost:8000/v1/ocr/stream/{task_id}"
+```
+
+#### 3. URL Download with Page Selection and Streaming
 
 ```bash
 curl -X POST "/v1/ocr/process-stream" \
   -F "request={
     'url': 'https://example.com/document.pdf',
     'mode': 'llm_enhanced',
+    'stream': true,
     'pdf_config': {
       'page_select': [1, 10, 20]
     }
   }"
 ```
 
-#### 4. JavaScript/Frontend Integration
+#### 4. JavaScript/Frontend Integration with Text Streaming
 
 ```javascript
-async function processSpecificPages(file, pages) {
+async function processSpecificPages(file, pages, enableStreaming = false) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('request', JSON.stringify({
     mode: 'llm_enhanced',
+    stream: enableStreaming,  // Enable real-time text streaming
     pdf_config: {
       page_select: pages  // e.g., [1, 3, 5]
     }
@@ -101,8 +126,20 @@ async function processSpecificPages(file, pages) {
   
   // Connect to streaming updates
   const eventSource = new EventSource(`/v1/ocr/stream/${task_id}`);
+  let currentPageText = '';
+  
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    
+    // Handle real-time text streaming
+    if (data.text_chunk) {
+      currentPageText = data.accumulated_text;
+      console.log('Live text:', currentPageText);
+      updateTextDisplay(currentPageText);
+      return;
+    }
+    
+    // Handle progress updates
     console.log(`Progress: ${data.progress_percentage}%`);
     console.log(`Processing page: ${data.current_page}`);
     
@@ -114,9 +151,9 @@ async function processSpecificPages(file, pages) {
 }
 
 // Usage examples
-processSpecificPages(fileInput.files[0], [1, 3, 5]);  // Process pages 1, 3, 5
-processSpecificPages(fileInput.files[0], [2]);        // Process only page 2
-processSpecificPages(fileInput.files[0], [1, 2, 3]);  // Process first 3 pages
+processSpecificPages(fileInput.files[0], [1, 3, 5], true);   // With streaming
+processSpecificPages(fileInput.files[0], [2], false);        // Without streaming
+processSpecificPages(fileInput.files[0], [1, 2, 3], true);   // First 3 pages with streaming
 ```
 
 ## Validation Rules
@@ -181,6 +218,37 @@ The streaming response includes progress updates for selected pages only:
     }
   ]
 }
+```
+
+### Text Streaming Response (when `stream: true`)
+
+When text streaming is enabled, you'll also receive character-by-character updates:
+
+```json
+{
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_page": 1,
+  "text_chunk": "T",
+  "accumulated_text": "T"
+}
+
+{
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_page": 1,
+  "text_chunk": "h",
+  "accumulated_text": "Th"
+}
+
+{
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_page": 1,
+  "text_chunk": "e",
+  "accumulated_text": "The"
+}
+```
 ```
 
 ### Final Response
@@ -257,32 +325,48 @@ When processing is complete:
 - Reduced memory usage and CPU time
 - Lower API costs for LLM processing
 
-### Example Scenarios
+### Example Scenarios with Streaming
 
 ```javascript
 // Scenario 1: Large PDF with 100 pages, only need first and last page
 {
+  "mode": "llm_enhanced",
+  "stream": true,
   "pdf_config": {
     "page_select": [1, 100]
   }
 }
-// Processing time: ~2% of full document
+// Processing time: ~2% of full document + real-time text feedback
 
-// Scenario 2: Extract specific chapters from a book
+// Scenario 2: Extract specific chapters from a book with streaming
 {
+  "mode": "llm_enhanced",
+  "stream": true,
   "pdf_config": {
     "page_select": [5, 15, 25, 35, 45]  // Chapter start pages
   }
 }
-// Processing time: ~5% of full document
+// Processing time: ~5% of full document + live text output
 
 // Scenario 3: Process odd pages only for double-sided scans
 {
+  "mode": "basic",  // Basic mode doesn't support streaming
   "pdf_config": {
     "page_select": [1, 3, 5, 7, 9, 11, 13, 15]
   }
 }
 // Processing time: ~50% of full document
+
+// Scenario 4: Real-time processing with immediate feedback
+{
+  "mode": "llm_enhanced",
+  "stream": true,
+  "prompt": "Extract all text accurately, including tables and headers",
+  "pdf_config": {
+    "page_select": [2, 4, 6]  // Even pages only
+  }
+}
+// Best user experience with immediate text display
 ```
 
 ## Legacy API Support

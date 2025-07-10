@@ -6,6 +6,7 @@ A FastAPI-based backend service for Optical Character Recognition (OCR) using ex
 
 - **External OCR Integration**: Uses Vision World API for text extraction
 - **LLM-Enhanced OCR**: Integration with Pathumma Vision OCR LLM for improved text extraction
+- **Real-time Text Streaming**: Character-by-character text output as LLM generates results
 - **PDF OCR Processing**: Multi-page PDF processing with batch optimization and memory management
 - **Automatic Image Scaling**: Intelligent image resizing to ensure LLM context limit compliance (4M pixels max)
 - **Dual Processing Modes**: Synchronous and asynchronous OCR processing for both images and PDFs
@@ -339,7 +340,11 @@ LOG_SANITIZE_SENSITIVE=True   # Remove sensitive data
 ### Health Check
 - `GET /health` - Service health status
 
-### OCR Processing
+### Unified OCR Processing (Recommended)
+- `POST /v1/ocr/process-stream` - Create OCR task with optional text streaming
+- `GET /v1/ocr/stream/{task_id}` - Server-sent events for real-time updates
+
+### Legacy OCR Processing
 - `POST /v1/ocr/process` - Asynchronous OCR processing
 - `POST /v1/ocr/process-sync` - Synchronous OCR processing
 
@@ -402,6 +407,14 @@ curl -X GET "http://localhost:8000/v1/ocr/parameters"
 curl -X POST "http://localhost:8000/v1/ocr/process-with-llm-sync" \
   -F "file=@image.jpg" \
   -F 'request={"threshold": 500, "contrast_level": 1.3, "prompt": "อ่านข้อความในภาพนี้", "model": "nectec/Pathumma-vision-ocr-lora-dev"}'
+
+# With real-time text streaming (unified API)
+curl -X POST "http://localhost:8000/v1/ocr/process-stream" \
+  -F "file=@image.jpg" \
+  -F 'request={"mode": "llm_enhanced", "stream": true, "prompt": "อ่านข้อความในภาพนี้"}'
+
+# Then connect to streaming endpoint
+curl -N "http://localhost:8000/v1/ocr/stream/{task_id}"
 ```
 
 ### Check LLM Task Status
@@ -448,6 +461,11 @@ curl -X POST "http://localhost:8000/v1/ocr/process-pdf-with-llm-sync" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@document.pdf" \
   -F 'request={"threshold": 500, "contrast_level": 1.3, "dpi": 300, "prompt": "อ่านข้อความในเอกสารนี้อย่างถูกต้อง", "model": "nectec/Pathumma-vision-ocr-lora-dev"}'
+
+# PDF with real-time text streaming (unified API)
+curl -X POST "http://localhost:8000/v1/ocr/process-stream" \
+  -F "file=@document.pdf" \
+  -F 'request={"mode": "llm_enhanced", "stream": true, "dpi": 300, "prompt": "อ่านข้อความในเอกสารนี้"}'
 
 # Asynchronous PDF + LLM processing
 curl -X POST "http://localhost:8000/v1/ocr/process-pdf-with-llm" \
@@ -798,6 +816,50 @@ CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 📡 Streaming Response Types
+
+When using `stream: true` with LLM-enhanced mode, the `/v1/ocr/stream/{task_id}` endpoint provides different types of Server-Sent Events:
+
+### Response Types Overview
+
+| Type | When | Key Fields | Purpose |
+|------|------|------------|---------|
+| **Progress** | During processing | `progress_percentage`, `current_page` | Show overall progress |
+| **Text Streaming** | During LLM generation | `text_chunk`, `accumulated_text` | Real-time text output |
+| **Page Completion** | Page finished | `latest_page_result`, `cumulative_results` | Page results |
+| **Final Completion** | All done | `status: "completed"`, final results | Complete response |
+| **Heartbeat** | Periodically | `heartbeat: true` | Keep connection alive |
+| **Error** | On failure | `error_message`, `status: "failed"` | Error information |
+
+### Quick Integration Example
+
+```javascript
+const eventSource = new EventSource(`/v1/ocr/stream/${taskId}`);
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  if (data.heartbeat) return; // Ignore heartbeats
+  
+  if (data.text_chunk) {
+    // Real-time text streaming
+    updateLiveText(data.accumulated_text);
+  } else if (data.progress_percentage !== undefined) {
+    // Progress update
+    updateProgressBar(data.progress_percentage);
+  } else if (data.status === 'completed') {
+    // Final results
+    showFinalResults(data.cumulative_results);
+    eventSource.close();
+  }
+};
+```
+
+For complete streaming examples, see:
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive response examples
+- **[Frontend Integration Guide](docs/guides/FRONTEND_INTEGRATION_GUIDE.md)** - React implementation
+- **[PDF Page Selection](docs/PDF_PAGE_SELECTION.md)** - Streaming with page selection
 
 ## 🆘 Support
 

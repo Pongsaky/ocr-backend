@@ -69,9 +69,10 @@ The codebase follows a clean layered architecture:
 
 ### API Endpoints Structure
 Main endpoints:
-1. **POST** `/v1/ocr/process-stream` - Create OCR processing task (supports PDF page selection)
+1. **POST** `/v1/ocr/process-stream` - Create OCR processing task (supports PDF page selection and text streaming)
 2. **GET** `/v1/ocr/process-stream/{task_id}` - Get task status and results
-3. **POST** `/v1/ocr/tasks/{task_id}/cancel` - Cancel running task
+3. **GET** `/v1/ocr/stream/{task_id}` - Server-sent events endpoint for real-time streaming updates
+4. **POST** `/v1/ocr/tasks/{task_id}/cancel` - Cancel running task
 
 #### PDF Page Selection Feature
 The unified API now supports selective PDF page processing:
@@ -79,6 +80,13 @@ The unified API now supports selective PDF page processing:
 - **Validation**: Pages must exist, no duplicates, automatically sorted
 - **Default**: Processes all pages if not specified
 - **Examples**: `[1]`, `[1, 3, 5]`, `[2, 4, 6, 8, 10]`
+
+#### Real-time Text Streaming Feature
+The API supports character-by-character text streaming for LLM-enhanced OCR:
+- **Field**: `stream` - Boolean flag to enable streaming (default: false)
+- **Works with**: Both images and PDFs in `llm_enhanced` mode
+- **Benefits**: Immediate feedback as text is generated, better UX for long documents
+- **Endpoint**: Connect to `/v1/ocr/stream/{task_id}` for Server-Sent Events
 
 ### External Service Integration
 1. **Vision World API**: Standard OCR processing (`VISION_WORLD_API_URL` env var)
@@ -121,8 +129,259 @@ Key environment variables (see `.env.example`):
 - Connection pooling for external APIs
 - Async file operations with `aiofiles`
 - Server-sent events for real-time status updates
+- Character-by-character text streaming reduces perceived wait time
 
 ## API Usage Examples
+
+### Text Streaming
+
+#### Enable Streaming for Images
+```bash
+# Process image with real-time text streaming
+curl -X POST "/v1/ocr/process-stream" \
+  -F "file=@image.jpg" \
+  -F "request={
+    'mode': 'llm_enhanced',
+    'stream': true,
+    'prompt': 'Extract all text from this image'
+  }"
+
+# Connect to streaming endpoint for real-time updates
+curl -N "http://localhost:8000/v1/ocr/stream/{task_id}"
+```
+
+#### Enable Streaming for PDFs
+```bash
+# Process PDF with text streaming and page selection
+curl -X POST "/v1/ocr/process-stream" \
+  -F "file=@document.pdf" \
+  -F "request={
+    'mode': 'llm_enhanced',
+    'stream': true,
+    'pdf_config': {
+      'page_select': [1, 3, 5]
+    }
+  }"
+```
+
+#### Comprehensive Streaming Response Examples
+
+When `stream: true`, the SSE endpoint provides many different types of responses during processing:
+
+##### 1. Initial Processing Updates
+```json
+// Upload completed, starting processing
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "validation",
+  "progress_percentage": 5.0,
+  "current_page": 0,
+  "total_pages": 3,
+  "timestamp": "2024-01-15T10:30:01Z"
+}
+
+// Starting OCR on first page
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "ocr_processing",
+  "progress_percentage": 15.0,
+  "current_page": 1,
+  "total_pages": 3,
+  "timestamp": "2024-01-15T10:30:03Z"
+}
+```
+
+##### 2. Real-time Text Streaming (Character-by-Character)
+```json
+// LLM starts generating text
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "llm_enhancement",
+  "current_page": 1,
+  "text_chunk": "ข",
+  "accumulated_text": "ข",
+  "timestamp": "2024-01-15T10:30:05Z"
+}
+
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "llm_enhancement",
+  "current_page": 1,
+  "text_chunk": "้",
+  "accumulated_text": "ข้",
+  "timestamp": "2024-01-15T10:30:05Z"
+}
+
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "llm_enhancement",
+  "current_page": 1,
+  "text_chunk": "อ",
+  "accumulated_text": "ข้อ",
+  "timestamp": "2024-01-15T10:30:05Z"
+}
+```
+
+##### 3. Page Completion Updates
+```json
+// First page completed
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "page_completed",
+  "current_step": "ocr_processing",
+  "progress_percentage": 33.3,
+  "current_page": 1,
+  "total_pages": 3,
+  "processed_pages": 1,
+  "failed_pages": 0,
+  "latest_page_result": {
+    "page_number": 1,
+    "extracted_text": "ข้อความจากหน้าที่ 1...",
+    "processing_time": 2.5,
+    "success": true,
+    "threshold_used": 500,
+    "contrast_level_used": 1.3,
+    "image_processing_time": 1.2,
+    "llm_processing_time": 1.3,
+    "model_used": "nectec/Pathumma-vision-ocr-lora-dev",
+    "timestamp": "2024-01-15T10:30:07Z"
+  },
+  "cumulative_results": [
+    {
+      "page_number": 1,
+      "extracted_text": "ข้อความจากหน้าที่ 1...",
+      "processing_time": 2.5,
+      "success": true,
+      "threshold_used": 500,
+      "contrast_level_used": 1.3
+    }
+  ],
+  "estimated_time_remaining": 12.5,
+  "processing_speed": 0.4,
+  "timestamp": "2024-01-15T10:30:07Z"
+}
+```
+
+##### 4. Progress During Multi-Page Processing
+```json
+// Starting page 2
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "image_extraction", 
+  "progress_percentage": 45.0,
+  "current_page": 2,
+  "total_pages": 3,
+  "processed_pages": 1,
+  "timestamp": "2024-01-15T10:30:08Z"
+}
+
+// Text streaming for page 2
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "llm_enhancement",
+  "current_page": 2,
+  "text_chunk": "เ",
+  "accumulated_text": "เ",
+  "timestamp": "2024-01-15T10:30:10Z"
+}
+```
+
+##### 5. Final Completion Response
+```json
+// All processing completed
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "completed",
+  "current_step": "completed",
+  "progress_percentage": 100.0,
+  "current_page": 3,
+  "total_pages": 3,
+  "processed_pages": 3,
+  "failed_pages": 0,
+  "cumulative_results": [
+    {
+      "page_number": 1,
+      "extracted_text": "ข้อความจากหน้าที่ 1...",
+      "processing_time": 2.5,
+      "success": true
+    },
+    {
+      "page_number": 2,
+      "extracted_text": "เนื้อหาจากหน้าที่ 2...",
+      "processing_time": 2.8,
+      "success": true
+    },
+    {
+      "page_number": 3,
+      "extracted_text": "ข้อมูลจากหน้าที่ 3...",
+      "processing_time": 2.1,
+      "success": true
+    }
+  ],
+  "processing_speed": 0.43,
+  "timestamp": "2024-01-15T10:30:15Z"
+}
+```
+
+##### 6. Error Handling During Streaming
+```json
+// Page processing failed
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "processing",
+  "current_step": "ocr_processing",
+  "progress_percentage": 66.7,
+  "current_page": 2,
+  "total_pages": 3,
+  "processed_pages": 1,
+  "failed_pages": 1,
+  "latest_page_result": {
+    "page_number": 2,
+    "extracted_text": "",
+    "processing_time": 1.2,
+    "success": false,
+    "error_message": "OCR processing failed for this page",
+    "threshold_used": 500,
+    "contrast_level_used": 1.3
+  },
+  "timestamp": "2024-01-15T10:30:12Z"
+}
+
+// Complete failure
+data: {
+  "task_id": "12345678-1234-1234-1234-123456789012",
+  "status": "failed",
+  "current_step": "failed",
+  "progress_percentage": 66.7,
+  "processed_pages": 1,
+  "failed_pages": 2,
+  "error_message": "Processing failed: Unable to process remaining pages",
+  "timestamp": "2024-01-15T10:30:13Z"
+}
+```
+
+##### 7. Heartbeat Messages (Keep Connection Alive)
+```json
+// Periodic heartbeat to prevent connection timeout
+data: {
+  "heartbeat": true,
+  "timestamp": "2024-01-15T10:30:10Z"
+}
+```
+
+##### Key Differences with Streaming Enabled:
+- **Text Chunks**: `text_chunk` and `accumulated_text` fields only appear when `stream: true`
+- **Granular Updates**: More frequent updates during text generation
+- **Character-level Feedback**: Each character appears as it's generated by the LLM
+- **Real-time Progress**: Progress updates happen during text streaming, not just between pages
+- **Multiple Event Types**: Processing, text streaming, page completion, and final completion events
 
 ### PDF Page Selection
 
@@ -171,12 +430,13 @@ curl -X POST "/v1/ocr/process-stream" \
 
 #### Frontend Integration
 ```javascript
-// React/JavaScript example
-const processSpecificPages = async (file, pages) => {
+// React/JavaScript example with streaming
+const processWithStreaming = async (file, pages) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('request', JSON.stringify({
     mode: 'llm_enhanced',
+    stream: true,  // Enable text streaming
     pdf_config: {
       page_select: pages  // e.g., [1, 3, 5]
     }
@@ -191,10 +451,30 @@ const processSpecificPages = async (file, pages) => {
   
   // Connect to streaming updates
   const eventSource = new EventSource(`/v1/ocr/stream/${task_id}`);
+  
+  let displayedText = '';
+  
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    console.log('Progress:', data.progress_percentage + '%');
-    console.log('Current page:', data.current_page);
+    
+    // Handle different event types
+    if (data.text_chunk) {
+      // Real-time text streaming
+      displayedText += data.text_chunk;
+      updateTextDisplay(displayedText);
+    } else if (data.progress_percentage !== undefined) {
+      // Progress updates
+      updateProgressBar(data.progress_percentage);
+    } else if (data.status === 'completed') {
+      // Final result
+      handleCompletion(data.result);
+      eventSource.close();
+    }
+  };
+  
+  eventSource.onerror = (error) => {
+    console.error('Streaming error:', error);
+    eventSource.close();
   };
 };
 ```
@@ -208,3 +488,10 @@ const processSpecificPages = async (file, pages) => {
   - Empty arrays are rejected
 - **Performance**: Only selected pages are converted to images and processed
 - **Streaming**: Real-time updates show progress for selected pages only
+
+### Text Streaming Rules
+- **Mode requirement**: Only works with `mode: 'llm_enhanced'`
+- **Real-time output**: Characters appear as the LLM generates them
+- **Accumulation**: Each chunk includes both the new character and accumulated text
+- **Performance**: No impact on processing speed, improves perceived performance
+- **Compatibility**: Works with both file uploads and URL downloads
