@@ -4,8 +4,9 @@ OCR LLM service for enhanced text extraction using Pathumma Vision OCR API.
 
 import time
 import base64
+import json
 from pathlib import Path
-from typing import List
+from typing import List, AsyncGenerator, Union
 
 import httpx
 from PIL import Image
@@ -39,7 +40,7 @@ class OCRLLMService:
         processed_image_base64: str,
         ocr_request: OCRLLMRequest,
         image_processing_time: float
-    ) -> OCRLLMResult:
+    ) -> Union[OCRLLMResult, AsyncGenerator[str, None]]:
         """
         Process an image with LLM for enhanced text extraction.
         
@@ -49,7 +50,8 @@ class OCRLLMService:
             image_processing_time: Time taken for initial OCR processing
             
         Returns:
-            OCRLLMResult: Enhanced OCR processing result
+            OCRLLMResult: Enhanced OCR processing result (if stream=False)
+            AsyncGenerator[str, None]: Streaming text chunks (if stream=True)
         """
         start_time = time.time()
         
@@ -76,27 +78,35 @@ class OCRLLMService:
             
             # Call LLM API
             llm_start_time = time.time()
-            enhanced_text = await self._call_llm_api(chat_request)
-            llm_processing_time = time.time() - llm_start_time
             
-            total_processing_time = time.time() - start_time + image_processing_time
-            
-            logger.info(
-                f"LLM-enhanced OCR processing completed in {llm_processing_time:.2f}s "
-                f"(total: {total_processing_time:.2f}s)"
-            )
-            
-            return OCRLLMResult(
-                success=True,
-                extracted_text=enhanced_text.strip() if enhanced_text else "",
-                processing_time=total_processing_time,
-                image_processing_time=image_processing_time,
-                llm_processing_time=llm_processing_time,
-                threshold_used=ocr_request.threshold,
-                contrast_level_used=ocr_request.contrast_level,
-                model_used=model,
-                prompt_used=prompt
-            )
+            if ocr_request.stream:
+                # For streaming, return the async generator directly
+                # The controller will handle the streaming response
+                llm_response = await self._call_llm_api(chat_request, stream=True)
+                return llm_response
+            else:
+                # For non-streaming, collect the full text
+                enhanced_text = await self._call_llm_api(chat_request, stream=False)
+                llm_processing_time = time.time() - llm_start_time
+                
+                total_processing_time = time.time() - start_time + image_processing_time
+                
+                logger.info(
+                    f"LLM-enhanced OCR processing completed in {llm_processing_time:.2f}s "
+                    f"(total: {total_processing_time:.2f}s)"
+                )
+                
+                return OCRLLMResult(
+                    success=True,
+                    extracted_text=enhanced_text.strip() if enhanced_text else "",
+                    processing_time=total_processing_time,
+                    image_processing_time=image_processing_time,
+                    llm_processing_time=llm_processing_time,
+                    threshold_used=ocr_request.threshold,
+                    contrast_level_used=ocr_request.contrast_level,
+                    model_used=model,
+                    prompt_used=prompt
+                )
             
         except Exception as e:
             total_processing_time = time.time() - start_time + image_processing_time
@@ -138,15 +148,17 @@ class OCRLLMService:
             )
         ]
     
-    async def _call_llm_api(self, request: LLMChatRequest) -> str:
+    async def _call_llm_api(self, request: LLMChatRequest, stream: bool = False):
         """
         Call the LLM API for text extraction.
         
         Args:
             request: LLM chat request
+            stream: Enable streaming response (default: False)
             
         Returns:
-            str: Extracted text from LLM
+            str: Extracted text from LLM (if stream=False)
+            AsyncGenerator[str]: Streaming text chunks (if stream=True)
             
         Raises:
             Exception: If API call fails
@@ -154,49 +166,55 @@ class OCRLLMService:
         url = f"{self.base_url}{self.endpoint}"
         
         try:
-            logger.debug(f"Calling LLM API: {url}")
+            logger.debug(f"Calling LLM API: {url} (stream={stream})")
             
-            # Serialize request excluding None fields
+            # Serialize request excluding None fields and add stream parameter
             request_dict = request.model_dump(exclude_none=True)
+            request_dict["stream"] = stream
             # logger.debug(f"LLM API request: {request_dict}")
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    url,
-                    headers={
-                        "Content-Type": "application/json",
-                        "accept": "application/json"
-                    },
-                    json=request_dict
-                )
-                
-                response.raise_for_status()
-                
-                # Parse response
-                response_data = response.json()
-                logger.info(f"LLM API response received: {response.status_code}")
-                
-                # Extract text from response
-                llm_response = LLMChatResponse(**response_data)
-                if llm_response.choices and len(llm_response.choices) > 0:
-                    message_content = llm_response.choices[0].message.content
-                    logger.debug(f"LLM API response received: {len(str(message_content)) if message_content else 0} characters")
+            if stream:
+                # Return async generator for streaming (client will be created inside the generator)
+                return self._stream_llm_response(url, request_dict)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    # Original non-streaming implementation
+                    response = await client.post(
+                        url,
+                        headers={
+                            "Content-Type": "application/json",
+                            "accept": "application/json"
+                        },
+                        json=request_dict
+                    )
                     
-                    # Handle None content gracefully
-                    if message_content is None:
-                        logger.warning("LLM API returned None content - this might indicate an API response format issue")
-                        extracted_text = ""
+                    response.raise_for_status()
+                    
+                    # Parse response
+                    response_data = response.json()
+                    logger.info(f"LLM API response received: {response.status_code}")
+                    
+                    # Extract text from response
+                    llm_response = LLMChatResponse(**response_data)
+                    if llm_response.choices and len(llm_response.choices) > 0:
+                        message_content = llm_response.choices[0].message.content
+                        logger.debug(f"LLM API response received: {len(str(message_content)) if message_content else 0} characters")
+                        
+                        # Handle None content gracefully
+                        if message_content is None:
+                            logger.warning("LLM API returned None content - this might indicate an API response format issue")
+                            extracted_text = ""
+                        else:
+                            extracted_text = str(message_content)
+                        
+                        # Log if text is empty for debugging
+                        if not extracted_text or not extracted_text.strip():
+                            logger.warning(f"LLM API returned empty/whitespace text. Raw content: '{repr(message_content)}'")
+                            logger.warning(f"Full LLM response: {response_data}")
+                        
+                        return extracted_text
                     else:
-                        extracted_text = str(message_content)
-                    
-                    # Log if text is empty for debugging
-                    if not extracted_text or not extracted_text.strip():
-                        logger.warning(f"LLM API returned empty/whitespace text. Raw content: '{repr(message_content)}'")
-                        logger.warning(f"Full LLM response: {response_data}")
-                    
-                    return extracted_text
-                else:
-                    raise Exception("No choices in LLM response")
+                        raise Exception("No choices in LLM response")
                 
         except httpx.TimeoutException:
             logger.error(f"Timeout calling LLM API: {url}")
@@ -207,6 +225,59 @@ class OCRLLMService:
         except Exception as e:
             logger.error(f"Unexpected error calling LLM API: {str(e)}")
             raise Exception(f"LLM service unavailable: {str(e)}")
+    
+    async def _stream_llm_response(self, url: str, request_dict: dict) -> AsyncGenerator[str, None]:
+        """
+        Stream LLM response chunks.
+        
+        Args:
+            url: API endpoint URL
+            request_dict: Request payload
+            
+        Yields:
+            str: Text chunks from streaming response
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream('POST', url, json=request_dict, headers={
+                    "Content-Type": "application/json",
+                    "accept": "text/event-stream"
+                }) as response:
+                    response.raise_for_status()
+                    logger.info(f"Started streaming LLM API response: {response.status_code}")
+                    
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                            
+                        if line.startswith("data: "):
+                            data_content = line[6:]  # Remove "data: " prefix
+                            
+                            if data_content == "[DONE]":
+                                logger.debug("LLM API streaming completed")
+                                break
+                                
+                            try:
+                                chunk_data = json.loads(data_content)
+                                
+                                # Extract content from delta
+                                if "choices" in chunk_data and chunk_data["choices"]:
+                                    delta = chunk_data["choices"][0].get("delta", {})
+                                    if "content" in delta:
+                                        content = delta["content"]
+                                        if content:  # Only yield non-empty content
+                                            yield content
+                                            
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"Failed to parse streaming chunk: {e}")
+                                continue
+                                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error in streaming LLM API: {e.response.status_code}")
+            raise Exception(f"LLM streaming service error: {e.response.status_code}")
+        except Exception as e:
+            logger.error(f"Unexpected error in streaming LLM API: {str(e)}")
+            raise Exception(f"LLM streaming service unavailable: {str(e)}")
     
     async def health_check(self) -> bool:
         """

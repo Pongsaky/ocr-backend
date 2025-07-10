@@ -96,7 +96,10 @@ data: {"task_id":"123...","status":"processing","current_page":0,"progress_perce
 
 data: {"task_id":"123...","status":"page_completed","current_page":1,"progress_percentage":11.1,"latest_page_result":{...},"cumulative_results":[...]}
 
-data: {"task_id":"123...","status":"page_completed","current_page":2,"progress_percentage":22.2,"latest_page_result":{...},"cumulative_results":[...]}
+🆕 **Text Streaming (when stream=true):**
+data: {"task_id":"123...","status":"processing","progress_percentage":80.0,"text_chunk":"ท","accumulated_text":"ท"}
+data: {"task_id":"123...","status":"processing","progress_percentage":80.0,"text_chunk":"ี่","accumulated_text":"ที่"}
+data: {"task_id":"123...","status":"processing","progress_percentage":80.0,"text_chunk":"จ","accumulated_text":"ที่จ"}
 
 data: {"task_id":"123...","status":"completed","progress_percentage":100.0,"cumulative_results":[...]}
 ```
@@ -121,6 +124,10 @@ data: {"task_id":"123...","status":"completed","progress_percentage":100.0,"cumu
 - `latest_page_result`: **Type 1** - Just completed page
 - `cumulative_results`: **Type 2** - All completed pages
 
+### 🆕 Text Streaming Fields (when stream=true)
+- `text_chunk`: Individual text chunk from LLM streaming
+- `accumulated_text`: Complete text accumulated so far
+
 ## Testing
 
 ### Unit Tests
@@ -138,6 +145,13 @@ data: {"task_id":"123...","status":"completed","progress_percentage":100.0,"cumu
 - **Location**: `scripts/test_streaming_demo.py`
 - **Purpose**: Live demonstration of streaming functionality
 - **Run**: `python scripts/test_streaming_demo.py`
+
+### 🆕 Text Streaming Tests
+- **Location**: `scripts/text_streaming/`
+- **Main Script**: `scripts/text_streaming/test_streaming_text.py`
+- **Quick Test**: `scripts/text_streaming/quick_stream_test.py`
+- **Demo**: `scripts/text_streaming/demo_streaming.py`
+- **Run**: `poetry run python scripts/text_streaming/test_streaming_text.py --test all`
 
 ## Performance Results
 
@@ -246,6 +260,12 @@ MAX_CONCURRENT_TASKS=3  # Controls parallel processing
 - Dual text results (original + enhanced)
 - Model and prompt tracking per update
 
+### 🆕 Real-Time Text Streaming
+1. **Character-Level Streaming**: Text appears character by character as LLM generates it
+2. **Live Text Accumulation**: Running total of extracted text updates in real-time
+3. **Immediate Feedback**: Users see OCR results instantly, not after completion
+4. **Cross-Platform Support**: Works for both images and PDFs with LLM enhancement
+
 ## Implementation Status
 
 ✅ **Completed**
@@ -254,23 +274,39 @@ MAX_CONCURRENT_TASKS=3  # Controls parallel processing
 - [x] Controller and API endpoints
 - [x] Server-Sent Events (SSE) streaming
 - [x] Dual streaming approach (individual + cumulative)
+- [x] **🆕 Real-time text streaming** for character-by-character text output
+- [x] **🆕 Streaming text chunks** during LLM processing
+- [x] **🆕 Live text accumulation** with progress updates
 - [x] Comprehensive unit testing (9 test cases)
 - [x] Integration testing with real PDF
 - [x] Error handling and cleanup
 - [x] Performance metrics and time estimation
 - [x] Demo script and documentation
+- [x] **🆕 Organized test scripts** in `scripts/text_streaming/` directory
 
 🔄 **Ready for Frontend Integration**
 - API endpoints fully functional
 - Both streaming formats available
+- **🆕 Real-time text streaming** for immediate feedback
 - Comprehensive testing completed
 - Performance validated with test PDF
 
 ## Usage Example
 
-See `scripts/test_streaming_demo.py` for a complete working example that demonstrates:
+See the following scripts for complete working examples:
+
+### Page-by-Page Streaming
+`scripts/test_streaming_demo.py` - Demonstrates:
 - Real-time progress updates
 - Both streaming result formats  
 - Performance metrics
 - Error handling
-- API endpoint usage patterns 
+- API endpoint usage patterns
+
+### 🆕 Real-Time Text Streaming
+`scripts/text_streaming/test_streaming_text.py` - Demonstrates:
+- Character-by-character text streaming
+- Live text accumulation
+- Both image and PDF support
+- Performance comparison
+- Comprehensive testing with colored output 

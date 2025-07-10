@@ -190,6 +190,10 @@ class OCRLLMRequest(BaseModel):
         default=None,
         description="LLM model to use (uses default if not provided)"
     )
+    stream: Optional[bool] = Field(
+        default=False,
+        description="Enable streaming response (default: False)"
+    )
     
     class Config:
         """Pydantic model configuration."""
@@ -198,7 +202,8 @@ class OCRLLMRequest(BaseModel):
                 "threshold": 500,
                 "contrast_level": 1.3,
                 "prompt": "อ่านข้อความในภาพนี้",
-                "model": "nectec/Pathumma-vision-ocr-lora-dev"
+                "model": "nectec/Pathumma-vision-ocr-lora-dev",
+                "stream": False
             }
         }
 
@@ -207,6 +212,10 @@ class LLMChatRequest(BaseModel):
     """LLM chat request model."""
     messages: List[ChatMessage] = Field(description="Chat messages")
     model: str = Field(description="LLM model name")
+    stream: Optional[bool] = Field(
+        default=False,
+        description="Enable streaming response (default: False)"
+    )
 
 
 class LLMChoice(BaseModel):
@@ -501,6 +510,10 @@ class PDFLLMOCRRequest(BaseModel):
         default=None,
         description="LLM model to use (uses default if not provided)"
     )
+    stream: Optional[bool] = Field(
+        default=False,
+        description="Enable streaming response for LLM processing (default: False)"
+    )
     page_select: Optional[List[int]] = Field(
         default=None,
         description="List of page numbers to process (1-indexed). If None, processes all pages."
@@ -530,6 +543,7 @@ class PDFLLMOCRRequest(BaseModel):
                 "dpi": 300,
                 "prompt": "อ่านข้อความในภาพนี้",
                 "model": "nectec/Pathumma-vision-ocr-lora-dev",
+                "stream": False,
                 "page_select": [1, 3, 5]
             }
         }

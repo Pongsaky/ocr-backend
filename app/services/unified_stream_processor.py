@@ -473,7 +473,8 @@ class UnifiedStreamProcessor:
                     threshold=request.threshold,
                     contrast_level=request.contrast_level,
                     prompt=request.prompt,
-                    model=request.model
+                    model=request.model,
+                    stream=request.stream  # Pass through stream parameter
                 )
                 
                 llm_result = await ocr_llm_service.process_image_with_llm(
@@ -482,23 +483,54 @@ class UnifiedStreamProcessor:
                     image_processing_time=ocr_result.processing_time
                 )
                 
-                if not llm_result.success:
-                    raise Exception(f"LLM processing failed: {llm_result.error_message}")
-                
-                # Create unified page result
-                page_result = UnifiedPageResult(
-                    page_number=1,
-                    extracted_text=llm_result.extracted_text,
-                    processing_time=llm_result.processing_time,
-                    success=True,
-                    threshold_used=llm_result.threshold_used,
-                    contrast_level_used=llm_result.contrast_level_used,
-                    image_processing_time=llm_result.image_processing_time,
-                    llm_processing_time=llm_result.llm_processing_time,
-                    model_used=llm_result.model_used,
-                    prompt_used=llm_result.prompt_used,
-                    timestamp=datetime.now(UTC)
-                )
+                # Handle streaming vs non-streaming LLM results
+                if request.stream:
+                    # Stream text chunks as they arrive
+                    collected_text = ""
+                    async for chunk in llm_result:
+                        collected_text += chunk
+                        
+                        # Send streaming text update
+                        await self._send_progress_update(
+                            task_id, FileType.IMAGE, request.mode, "processing",
+                            ProcessingStep.LLM_ENHANCEMENT, 80.0, "Streaming LLM response...",
+                            text_chunk=chunk,
+                            accumulated_text=collected_text
+                        )
+                    
+                    # Create unified page result with collected text
+                    page_result = UnifiedPageResult(
+                        page_number=1,
+                        extracted_text=collected_text.strip(),
+                        processing_time=0.0,  # Not meaningful for streaming
+                        success=True,
+                        threshold_used=llm_request.threshold,
+                        contrast_level_used=llm_request.contrast_level,
+                        image_processing_time=ocr_result.processing_time,
+                        llm_processing_time=0.0,  # Not meaningful for streaming
+                        model_used=llm_request.model or "default",
+                        prompt_used=llm_request.prompt or "default",
+                        timestamp=datetime.now(UTC)
+                    )
+                else:
+                    # Non-streaming mode - handle normal result
+                    if not llm_result.success:
+                        raise Exception(f"LLM processing failed: {llm_result.error_message}")
+                    
+                    # Create unified page result
+                    page_result = UnifiedPageResult(
+                        page_number=1,
+                        extracted_text=llm_result.extracted_text,
+                        processing_time=llm_result.processing_time,
+                        success=True,
+                        threshold_used=llm_result.threshold_used,
+                        contrast_level_used=llm_result.contrast_level_used,
+                        image_processing_time=llm_result.image_processing_time,
+                        llm_processing_time=llm_result.llm_processing_time,
+                        model_used=llm_result.model_used,
+                        prompt_used=llm_result.prompt_used,
+                        timestamp=datetime.now(UTC)
+                    )
             
             # Send completion update
             await self._send_progress_update(
@@ -542,7 +574,8 @@ class UnifiedStreamProcessor:
                     dpi=request.dpi or 300,
                     prompt=request.prompt,
                     model=request.model,
-                    page_select=request.pdf_config.page_select if request.pdf_config else None
+                    page_select=request.pdf_config.page_select if request.pdf_config else None,
+                    stream=request.stream  # Pass through stream parameter
                 )
                 
                 # Use existing PDF LLM streaming service
@@ -640,7 +673,9 @@ class UnifiedStreamProcessor:
         progress: float,
         message: str,
         latest_result: Optional[UnifiedPageResult] = None,
-        cumulative_results: Optional[List[UnifiedPageResult]] = None
+        cumulative_results: Optional[List[UnifiedPageResult]] = None,
+        text_chunk: Optional[str] = None,
+        accumulated_text: Optional[str] = None
     ):
         """Send progress update to streaming queue."""
         queue = self.streaming_queues.get(task_id)
@@ -676,6 +711,8 @@ class UnifiedStreamProcessor:
             processed_pages=processed_pages,
             latest_page_result=latest_result,
             cumulative_results=cumulative_results or [],
+            text_chunk=text_chunk,
+            accumulated_text=accumulated_text,
             timestamp=datetime.now(UTC)
         )
         

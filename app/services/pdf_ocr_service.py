@@ -652,7 +652,9 @@ class PDFOCRService:
         self, 
         image_path: Path, 
         page_number: int, 
-        ocr_llm_request: OCRLLMRequest
+        ocr_llm_request: OCRLLMRequest,
+        task_id: str = None,
+        progress_queue: asyncio.Queue = None
     ) -> PDFPageLLMResult:
         """
         Process a single image with LLM-enhanced OCR.
@@ -686,38 +688,81 @@ class PDFOCRService:
                 image_processing_time=processed_data["image_processing_time"]
             )
             
-            total_processing_time = time.time() - start_time
-            
-            if llm_result.success:
-                logger.debug(f"Page {page_number} LLM processing successful in {total_processing_time:.2f}s")
+            # Handle streaming vs non-streaming results
+            if ocr_llm_request.stream:
+                # Stream text chunks as they arrive
+                collected_text = ""
+                async for chunk in llm_result:
+                    collected_text += chunk
+                    
+                    # Send streaming text update if queue is provided
+                    if progress_queue and task_id:
+                        from app.models.unified_models import UnifiedStreamingStatus, ProcessingStep, ProcessingMode, FileType
+                        
+                        streaming_update = UnifiedStreamingStatus(
+                            task_id=task_id,
+                            file_type=FileType.PDF,
+                            processing_mode=ProcessingMode.LLM_ENHANCED,
+                            status="processing",
+                            current_step=ProcessingStep.LLM_ENHANCEMENT,
+                            progress_percentage=80.0,
+                            message=f"Streaming LLM response for page {page_number}...",
+                            text_chunk=chunk,
+                            accumulated_text=collected_text,
+                            timestamp=datetime.now(UTC)
+                        )
+                        await progress_queue.put(streaming_update)
+                
+                total_processing_time = time.time() - start_time
+                
+                # Create result with collected text
                 return PDFPageLLMResult(
                     page_number=page_number,
-                    extracted_text=llm_result.extracted_text,
+                    extracted_text=collected_text.strip(),
                     processing_time=total_processing_time,
-                    image_processing_time=llm_result.image_processing_time,
-                    llm_processing_time=llm_result.llm_processing_time,
+                    image_processing_time=processed_data["image_processing_time"],
+                    llm_processing_time=0.0,  # Not meaningful for streaming
                     success=True,
                     error_message=None,
-                    threshold_used=llm_result.threshold_used,
-                    contrast_level_used=llm_result.contrast_level_used,
-                    model_used=llm_result.model_used,
-                    prompt_used=llm_result.prompt_used
+                    threshold_used=ocr_llm_request.threshold,
+                    contrast_level_used=ocr_llm_request.contrast_level,
+                    model_used=ocr_llm_request.model or "default",
+                    prompt_used=ocr_llm_request.prompt or "default"
                 )
             else:
-                logger.warning(f"Page {page_number} LLM processing failed")
-                return PDFPageLLMResult(
-                    page_number=page_number,
-                    extracted_text="",
-                    processing_time=total_processing_time,
-                    image_processing_time=llm_result.image_processing_time,
-                    llm_processing_time=llm_result.llm_processing_time,
-                    success=False,
-                    error_message="LLM processing failed",
-                    threshold_used=llm_result.threshold_used,
-                    contrast_level_used=llm_result.contrast_level_used,
-                    model_used=llm_result.model_used,
-                    prompt_used=llm_result.prompt_used
-                )
+                # Non-streaming mode - handle normal result
+                total_processing_time = time.time() - start_time
+                
+                if llm_result.success:
+                    logger.debug(f"Page {page_number} LLM processing successful in {total_processing_time:.2f}s")
+                    return PDFPageLLMResult(
+                        page_number=page_number,
+                        extracted_text=llm_result.extracted_text,
+                        processing_time=total_processing_time,
+                        image_processing_time=llm_result.image_processing_time,
+                        llm_processing_time=llm_result.llm_processing_time,
+                        success=True,
+                        error_message=None,
+                        threshold_used=llm_result.threshold_used,
+                        contrast_level_used=llm_result.contrast_level_used,
+                        model_used=llm_result.model_used,
+                        prompt_used=llm_result.prompt_used
+                    )
+                else:
+                    logger.warning(f"Page {page_number} LLM processing failed")
+                    return PDFPageLLMResult(
+                        page_number=page_number,
+                        extracted_text="",
+                        processing_time=total_processing_time,
+                        image_processing_time=llm_result.image_processing_time,
+                        llm_processing_time=llm_result.llm_processing_time,
+                        success=False,
+                        error_message="LLM processing failed",
+                        threshold_used=llm_result.threshold_used,
+                        contrast_level_used=llm_result.contrast_level_used,
+                        model_used=llm_result.model_used,
+                        prompt_used=llm_result.prompt_used
+                    )
                 
         except Exception as e:
             total_processing_time = time.time() - start_time
@@ -1245,7 +1290,8 @@ class PDFOCRService:
             threshold=request.threshold,
             contrast_level=request.contrast_level,
             prompt=request.prompt,
-            model=request.model
+            model=request.model,
+            stream=request.stream
         )
         
         # Process pages one by one for streaming
@@ -1259,7 +1305,7 @@ class PDFOCRService:
                 await self.check_task_cancellation(task_id)
                 
                 # Process single page with LLM
-                result = await self._process_single_image_with_llm(image_path, page_num, ocr_llm_request)
+                result = await self._process_single_image_with_llm(image_path, page_num, ocr_llm_request, task_id, progress_queue)
                 page_processing_time = time.time() - page_start_time
                 
                 traditional_results.append(result)

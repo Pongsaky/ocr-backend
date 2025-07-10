@@ -121,6 +121,12 @@ class UnifiedOCRRequest(BaseModel):
         default=None,
         description="PDF-specific configuration options (PDF files only)"
     )
+    
+    # Streaming support
+    stream: Optional[bool] = Field(
+        default=False,
+        description="Enable streaming text output for LLM processing (default: False)"
+    )
 
     @field_validator('url')
     @classmethod
@@ -155,7 +161,8 @@ class UnifiedOCRRequest(BaseModel):
             "model": "gpt-4-vision-preview",
             "pdf_config": {
                 "page_select": [1, 3, 5]
-            }
+            },
+            "stream": True
         }
     })
 
@@ -319,6 +326,16 @@ class UnifiedStreamingStatus(BaseModel):
     cumulative_results: List[UnifiedPageResult] = Field(
         default=[],
         description="All processed page results so far (Type 2: complete state)"
+    )
+    
+    # Streaming text support (for LLM processing)
+    text_chunk: Optional[str] = Field(
+        default=None,
+        description="Text chunk for streaming LLM output (when stream=True)"
+    )
+    accumulated_text: Optional[str] = Field(
+        default=None,
+        description="Accumulated text so far during streaming (when stream=True)"
     )
     
     # Performance metrics
