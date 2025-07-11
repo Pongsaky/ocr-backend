@@ -1,0 +1,146 @@
+{
+  "timestamp": "2025-07-10T19:36:56.999580+00:00",
+  "summary": {
+    "total_tests": 4,
+    "total_requests": 8,
+    "total_errors": 0,
+    "total_duration": 1.2766590118408203
+  },
+  "tests": [
+    {
+      "name": "Response Time Baseline",
+      "timestamp": "2025-07-10T19:36:56.212148+00:00",
+      "metrics": {
+        "test_name": "Response Time Baseline",
+        "timestamp": "2025-07-10 19:36:56.212148+00:00",
+        "response_times": [
+          0.15486598014831543,
+          0.15313005447387695,
+          0.1481468677520752
+        ],
+        "success_count": 3,
+        "error_count": 0,
+        "total_requests": 3,
+        "duration": 0.4940471649169922,
+        "errors": [],
+        "metadata": {
+          "test_type": "baseline",
+          "image_count": 3
+        }
+      },
+      "summary": {
+        "avg_response_time": 0.15204763412475586,
+        "median_response_time": 0.15313005447387695,
+        "percentile_95_response_time": 0.15486598014831543,
+        "percentile_99_response_time": 0.15486598014831543,
+        "min_response_time": 0.1481468677520752,
+        "max_response_time": 0.15486598014831543,
+        "success_rate": 100.0,
+        "error_rate": 0.0,
+        "throughput": 6.072294738305093,
+        "total_requests": 3,
+        "total_duration": 0.4940471649169922
+      }
+    },
+    {
+      "name": "Small Image Performance",
+      "timestamp": "2025-07-10T19:36:56.527024+00:00",
+      "metrics": {
+        "test_name": "Small Image Performance",
+        "timestamp": "2025-07-10 19:36:56.527024+00:00",
+        "response_times": [
+          0.14854192733764648,
+          0.15750885009765625
+        ],
+        "success_count": 2,
+        "error_count": 0,
+        "total_requests": 2,
+        "duration": 0.31442785263061523,
+        "errors": [],
+        "metadata": {
+          "test_type": "image_size",
+          "size": "small"
+        }
+      },
+      "summary": {
+        "avg_response_time": 0.15302538871765137,
+        "median_response_time": 0.15302538871765137,
+        "percentile_95_response_time": 0.15750885009765625,
+        "percentile_99_response_time": 0.15750885009765625,
+        "min_response_time": 0.14854192733764648,
+        "max_response_time": 0.15750885009765625,
+        "success_rate": 100.0,
+        "error_rate": 0.0,
+        "throughput": 6.360759656841112,
+        "total_requests": 2,
+        "total_duration": 0.31442785263061523
+      }
+    },
+    {
+      "name": "Large Image Performance",
+      "timestamp": "2025-07-10T19:36:56.891191+00:00",
+      "metrics": {
+        "test_name": "Large Image Performance",
+        "timestamp": "2025-07-10 19:36:56.891191+00:00",
+        "response_times": [
+          0.1758887767791748,
+          0.1788191795349121
+        ],
+        "success_count": 2,
+        "error_count": 0,
+        "total_requests": 2,
+        "duration": 0.36414098739624023,
+        "errors": [],
+        "metadata": {
+          "test_type": "image_size",
+          "size": "large"
+        }
+      },
+      "summary": {
+        "avg_response_time": 0.17735397815704346,
+        "median_response_time": 0.17735397815704346,
+        "percentile_95_response_time": 0.1788191795349121,
+        "percentile_99_response_time": 0.1788191795349121,
+        "min_response_time": 0.1758887767791748,
+        "max_response_time": 0.1788191795349121,
+        "success_rate": 100.0,
+        "error_rate": 0.0,
+        "throughput": 5.492378142600296,
+        "total_requests": 2,
+        "total_duration": 0.36414098739624023
+      }
+    },
+    {
+      "name": "Error Handling Performance",
+      "timestamp": "2025-07-10T19:36:56.995247+00:00",
+      "metrics": {
+        "test_name": "Error Handling Performance",
+        "timestamp": "2025-07-10 19:36:56.995247+00:00",
+        "response_times": [
+          0.10403108596801758
+        ],
+        "success_count": 1,
+        "error_count": 0,
+        "total_requests": 1,
+        "duration": 0.10404300689697266,
+        "errors": [],
+        "metadata": {
+          "test_type": "error_handling"
+        }
+      },
+      "summary": {
+        "avg_response_time": 0.10403108596801758,
+        "median_response_time": 0.10403108596801758,
+        "percentile_95_response_time": 0.10403108596801758,
+        "percentile_99_response_time": 0.10403108596801758,
+        "min_response_time": 0.10403108596801758,
+        "max_response_time": 0.10403108596801758,
+        "success_rate": 100.0,
+        "error_rate": 0.0,
+        "throughput": 9.611410029606681,
+        "total_requests": 1,
+        "total_duration": 0.10404300689697266
+      }
+    }
+  ]
+}

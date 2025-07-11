@@ -5,7 +5,7 @@ Pytest configuration and fixtures for OCR Backend API tests.
 import asyncio
 import tempfile
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Union
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,14 +16,47 @@ from PIL import Image
 from app.main import app
 from app.models.ocr_models import OCRRequest, OCRResult
 
+# Import remote testing utilities
+from tests.remote_test_config import RemoteTestConfig
+from tests.remote_client import RemoteTestClient, AsyncRemoteTestClient
+
 
 # Removed custom event_loop fixture to avoid deprecation warnings
 # pytest-asyncio provides its own event loop management
 
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    """Create a test client for the FastAPI app."""
+def client() -> Generator[Union[TestClient, RemoteTestClient], None, None]:
+    """
+    Create a test client for the FastAPI app.
+    
+    Returns either a FastAPI TestClient for local testing or a RemoteTestClient
+    for testing against deployed instances based on the REMOTE_API_URL environment variable.
+    """
+    if RemoteTestConfig.is_remote_testing():
+        # Use remote client for deployed instance testing
+        yield RemoteTestClient()
+    else:
+        # Use FastAPI test client for local testing
+        with TestClient(app) as client:
+            yield client
+
+
+@pytest.fixture
+def remote_client() -> RemoteTestClient:
+    """Create a remote test client explicitly for remote testing."""
+    return RemoteTestClient()
+
+
+@pytest.fixture
+def async_remote_client() -> AsyncRemoteTestClient:
+    """Create an async remote test client for remote testing."""
+    return AsyncRemoteTestClient()
+
+
+@pytest.fixture
+def local_client() -> Generator[TestClient, None, None]:
+    """Create a local test client explicitly for local testing."""
     with TestClient(app) as client:
         yield client
 
